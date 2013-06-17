@@ -212,8 +212,8 @@ static void armpmu_update_counters(void)
  * UNKNOWN at reset, the PMU must be explicitly reset to avoid reading
  * junk values out of them.
  */
-static int __cpuinit cpu_pmu_notify(struct notifier_block *b,
-				    unsigned long action, void *hcpu)
+static int cpu_pmu_notify(struct notifier_block *b, unsigned long action,
+			  void *hcpu)
 {
 	int irq;
 	struct pmu *pmu;
@@ -281,7 +281,7 @@ static int __cpuinit cpu_pmu_notify(struct notifier_block *b,
 	return NOTIFY_OK;
 }
 
-static struct notifier_block __cpuinitdata cpu_pmu_hotplug_notifier = {
+static struct notifier_block cpu_pmu_hotplug_notifier = {
 	.notifier_call = cpu_pmu_notify,
 };
 

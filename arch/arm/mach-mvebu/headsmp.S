@@ -27,8 +27,6 @@
  */
 #define ARMADA_XP_CFB_BASE	     0xD0020200
 
-	__CPUINIT
-
 /*
  * Armada XP specific entry point for secondary CPUs.
  * We add the CPU to the coherency fabric and then jump to secondary
