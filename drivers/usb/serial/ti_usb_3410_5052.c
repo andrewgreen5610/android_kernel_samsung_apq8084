@@ -442,6 +442,8 @@ static int ti_port_probe(struct usb_serial_port *port)
 
 	usb_set_serial_port_data(port, tport);
 
+	port->port.drain_delay = 3;
+
 	return 0;
 }
 
@@ -582,8 +584,6 @@ static int ti_open(struct tty_struct *tty, struct usb_serial_port *port)
 
 	tport->tp_is_open = 1;
 	++tdev->td_open_port_count;
-
-	port->port.drain_delay = 3;
 
 	goto release_lock;
 
