@@ -682,7 +682,7 @@ event_enable_read(struct file *filp, char __user *ubuf, size_t cnt,
 {
 	struct ftrace_event_file *file;
 	unsigned long flags;
-	char *buf;
+	char buf[4] = "0";
 
 	mutex_lock(&event_mutex);
 	file = event_file_data(filp);
@@ -693,15 +693,15 @@ event_enable_read(struct file *filp, char __user *ubuf, size_t cnt,
 	if (!file)
 		return -ENODEV;
 
-	if (flags & FTRACE_EVENT_FL_ENABLED) {
-		if (flags & FTRACE_EVENT_FL_SOFT_DISABLED)
-			buf = "0*\n";
-		else if (flags & FTRACE_EVENT_FL_SOFT_MODE)
-			buf = "1*\n";
-		else
-			buf = "1\n";
-	} else
-		buf = "0\n";
+	if (file->flags & FTRACE_EVENT_FL_ENABLED &&
+	    !(file->flags & FTRACE_EVENT_FL_SOFT_DISABLED))
+		strcpy(buf, "1");
+
+	if (file->flags & FTRACE_EVENT_FL_SOFT_DISABLED ||
+	    file->flags & FTRACE_EVENT_FL_SOFT_MODE)
+		strcat(buf, "*");
+
+	strcat(buf, "\n");
 
 	return simple_read_from_buffer(ubuf, cnt, ppos, buf, strlen(buf));
 }
