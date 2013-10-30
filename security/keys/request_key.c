@@ -578,7 +578,9 @@ int wait_for_key_construction(struct key *key, bool intr)
 	if (ret)
 		return -ERESTARTSYS;
 	if (test_bit(KEY_FLAG_NEGATIVE, &key->flags)) {
+		smp_rmb();
 		return key->type_data.reject_error;
+	}
 	return key_validate(key);
 }
 EXPORT_SYMBOL(wait_for_key_construction);
