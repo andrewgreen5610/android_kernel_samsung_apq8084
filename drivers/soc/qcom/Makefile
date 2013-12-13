@@ -31,3 +31,18 @@ obj-$(CONFIG_MSM_SMP2P_TEST) += smp2p_loopback.o smp2p_test.o smp2p_spinlock_tes
 obj-$(CONFIG_MSM_WATCHDOG_V2) += watchdog_v2.o
 obj-$(CONFIG_MEM_SHARE_QMI_SERVICE)		+= memshare/
 obj-y		+= socinfo.o
+
+obj-$(CONFIG_MSM_PIL) += peripheral-loader.o
+obj-$(CONFIG_MSM_PIL_SSR_GENERIC) += subsys-pil-tz.o
+obj-$(CONFIG_MSM_PIL) += scm-pas.o
+obj-$(CONFIG_MSM_PIL_MSS_QDSP6V5) += pil-q6v5.o pil-msa.o pil-q6v5-mss.o
+obj-$(CONFIG_MSM_PIL_PRONTO) += pil-pronto.o
+obj-$(CONFIG_MSM_PIL_FEMTO) += pil-q6v5.o pil-msa.o pil-femto-modem.o
+
+ifdef CONFIG_MSM_SUBSYSTEM_RESTART
+	obj-y += subsystem_notif.o
+	obj-y += subsystem_restart.o
+	obj-y += ramdump.o
+endif
+obj-$(CONFIG_MSM_SYSMON_COMM) += sysmon.o
+
