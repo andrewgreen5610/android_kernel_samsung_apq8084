@@ -918,7 +918,7 @@ static int xs_local_copy_to_xdr(struct xdr_buf *xdr, struct sk_buff *skb)
  *
  * Currently this assumes we can read the whole reply in a single gulp.
  */
-static void xs_local_data_ready(struct sock *sk, int len)
+static void xs_local_data_ready(struct sock *sk)
 {
 	struct rpc_task *task;
 	struct rpc_xprt *xprt;
@@ -981,7 +981,7 @@ static void xs_local_data_ready(struct sock *sk, int len)
  * @len: how much data to read
  *
  */
-static void xs_udp_data_ready(struct sock *sk, int len)
+static void xs_udp_data_ready(struct sock *sk)
 {
 	struct rpc_task *task;
 	struct rpc_xprt *xprt;
@@ -1416,7 +1416,7 @@ static int xs_tcp_data_recv(read_descriptor_t *rd_desc, struct sk_buff *skb, uns
  * @bytes: how much data to read
  *
  */
-static void xs_tcp_data_ready(struct sock *sk, int bytes)
+static void xs_tcp_data_ready(struct sock *sk)
 {
 	struct rpc_xprt *xprt;
 	read_descriptor_t rd_desc;
