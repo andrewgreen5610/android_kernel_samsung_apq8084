@@ -17,10 +17,6 @@ extern struct class *sec_class;
 extern int poweroff_charging;
 #endif
 
-#ifdef CONFIG_INPUT_BOOSTER
-#include <linux/input/input_booster.h>
-#endif
-
 #include <linux/input.h>
 #include <linux/mutex.h>
 #include <linux/wakelock.h>
@@ -301,6 +297,7 @@ struct cypress_touchkey_info {
 	bool	support_fw_update;
 	bool	do_checksum;
 	struct wake_lock fw_wakelock;
+	atomic_t keypad_enable;
 };
 
 #ifdef TK_INFORM_CHARGER
