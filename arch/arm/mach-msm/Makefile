@@ -141,6 +141,7 @@ obj-$(CONFIG_EXTCON) += board-extcon-connector.o
 obj-$(CONFIG_REGULATOR_MAX77803) += sec-regulator-max77803.o
 obj-$(CONFIG_REGULATOR_MAX77828) += sec-regulator-max77828.o
 
+<<<<<<< HEAD
 
 obj-$(CONFIG_SEC_DEBUG) += sec_debug.o sec_gaf.o sec_getlog.o
 obj-$(CONFIG_SEC_DEBUG_DOUBLE_FREE) += sec_debug-dfd.o
@@ -150,3 +151,6 @@ obj-$(CONFIG_SEC_BSP) += sec_bsp.o
 obj-$(CONFIG_SEC_THERMISTOR) += sec_thermistor.o apq8084-thermistor.o
 obj-$(CONFIG_BT_BCM4358) += board-bluetooth-bcm4358.o
 obj-$(CONFIG_GSM_MODEM_SPRD6500) += board-sprd6500-spi.o board-sprd6500-modems.o
+=======
+obj-$(CONFIG_MSM_HOTPLUG) += msm_hotplug.o
+>>>>>>> 9c7b44c... msm: Add MSM Hotplug driver
