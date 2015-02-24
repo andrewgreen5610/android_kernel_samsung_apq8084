@@ -136,3 +136,5 @@ obj-$(CONFIG_PERFMAP) += perfmap.o
 obj-$(CONFIG_EXTCON) += board-extcon-connector.o
 obj-$(CONFIG_REGULATOR_MAX77803) += sec-regulator-max77803.o
 obj-$(CONFIG_REGULATOR_MAX77828) += sec-regulator-max77828.o
+
+obj-$(CONFIG_MSM_HOTPLUG) += msm_hotplug.o
