@@ -1007,12 +1007,10 @@ config TOUCHSCREEN_GT9XX
 
           If unsure, say N.
 
-config SEC_STRING_ENABLE
-	bool "Samsung String image Enalbe, Disable feature"
-	help
-	  Say Y here if you can use low power mode, string event
-
-	  If unsure, say N.
+config STATE_NOTIFIER
+        bool "State Notifier"
+	depends on TOUCHSCREEN_ATMEL_MXT_MMI
+	default y
 
 source "drivers/input/touchscreen/gt9xx/Kconfig"
 source "drivers/input/touchscreen/synaptics/Kconfig"
