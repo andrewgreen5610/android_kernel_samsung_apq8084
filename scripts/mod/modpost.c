@@ -928,7 +928,8 @@ enum mismatch {
 
 struct sectioncheck {
 	const char *fromsec[20];
-	const char *tosec[20];
+	const char *bad_tosec[20];
+	const char *good_tosec[20];
 	enum mismatch mismatch;
 	const char *symbol_white_list[20];
 };
@@ -939,19 +940,19 @@ static const struct sectioncheck sectioncheck[] = {
  */
 {
 	.fromsec = { TEXT_SECTIONS, NULL },
-	.tosec   = { ALL_INIT_SECTIONS, NULL },
+	.bad_tosec = { ALL_INIT_SECTIONS, NULL },
 	.mismatch = TEXT_TO_ANY_INIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 {
 	.fromsec = { DATA_SECTIONS, NULL },
-	.tosec   = { ALL_XXXINIT_SECTIONS, NULL },
+	.bad_tosec = { ALL_XXXINIT_SECTIONS, NULL },
 	.mismatch = DATA_TO_ANY_INIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 {
 	.fromsec = { DATA_SECTIONS, NULL },
-	.tosec   = { INIT_SECTIONS, NULL },
+	.bad_tosec = { INIT_SECTIONS, NULL },
 	.mismatch = DATA_TO_ANY_INIT,
 	.symbol_white_list = {
 		"*_template", "*_timer", "*_sht", "*_ops",
@@ -960,82 +961,82 @@ static const struct sectioncheck sectioncheck[] = {
 },
 {
 	.fromsec = { TEXT_SECTIONS, NULL },
-	.tosec   = { ALL_EXIT_SECTIONS, NULL },
+	.bad_tosec = { ALL_EXIT_SECTIONS, NULL },
 	.mismatch = TEXT_TO_ANY_EXIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 {
 	.fromsec = { DATA_SECTIONS, NULL },
-	.tosec   = { ALL_EXIT_SECTIONS, NULL },
+	.bad_tosec = { ALL_EXIT_SECTIONS, NULL },
 	.mismatch = DATA_TO_ANY_EXIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 /* Do not reference init code/data from cpuinit/meminit code/data */
 {
 	.fromsec = { ALL_XXXINIT_SECTIONS, NULL },
-	.tosec   = { INIT_SECTIONS, NULL },
+	.bad_tosec = { INIT_SECTIONS, NULL },
 	.mismatch = XXXINIT_TO_SOME_INIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 /* Do not reference cpuinit code/data from meminit code/data */
 {
 	.fromsec = { MEM_INIT_SECTIONS, NULL },
-	.tosec   = { CPU_INIT_SECTIONS, NULL },
+	.bad_tosec   = { CPU_INIT_SECTIONS, NULL },
 	.mismatch = XXXINIT_TO_SOME_INIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 /* Do not reference meminit code/data from cpuinit code/data */
 {
 	.fromsec = { CPU_INIT_SECTIONS, NULL },
-	.tosec   = { MEM_INIT_SECTIONS, NULL },
+	.bad_tosec   = { MEM_INIT_SECTIONS, NULL },
 	.mismatch = XXXINIT_TO_SOME_INIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 /* Do not reference exit code/data from cpuexit/memexit code/data */
 {
 	.fromsec = { ALL_XXXEXIT_SECTIONS, NULL },
-	.tosec   = { EXIT_SECTIONS, NULL },
+	.bad_tosec = { EXIT_SECTIONS, NULL },
 	.mismatch = XXXEXIT_TO_SOME_EXIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 /* Do not reference cpuexit code/data from memexit code/data */
 {
 	.fromsec = { MEM_EXIT_SECTIONS, NULL },
-	.tosec   = { CPU_EXIT_SECTIONS, NULL },
+	.bad_tosec   = { CPU_EXIT_SECTIONS, NULL },
 	.mismatch = XXXEXIT_TO_SOME_EXIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 /* Do not reference memexit code/data from cpuexit code/data */
 {
 	.fromsec = { CPU_EXIT_SECTIONS, NULL },
-	.tosec   = { MEM_EXIT_SECTIONS, NULL },
+	.bad_tosec   = { MEM_EXIT_SECTIONS, NULL },
 	.mismatch = XXXEXIT_TO_SOME_EXIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 /* Do not use exit code/data from init code */
 {
 	.fromsec = { ALL_INIT_SECTIONS, NULL },
-	.tosec   = { ALL_EXIT_SECTIONS, NULL },
+	.bad_tosec = { ALL_EXIT_SECTIONS, NULL },
 	.mismatch = ANY_INIT_TO_ANY_EXIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 /* Do not use init code/data from exit code */
 {
 	.fromsec = { ALL_EXIT_SECTIONS, NULL },
-	.tosec   = { ALL_INIT_SECTIONS, NULL },
+	.bad_tosec = { ALL_INIT_SECTIONS, NULL },
 	.mismatch = ANY_EXIT_TO_ANY_INIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 },
 {
 	.fromsec = { ALL_PCI_INIT_SECTIONS, NULL },
-	.tosec   = { INIT_SECTIONS, NULL },
+	.bad_tosec = { INIT_SECTIONS, NULL },
 	.mismatch = ANY_INIT_TO_ANY_EXIT,
 	.symbol_white_list = { NULL },
 },
 /* Do not export init/exit functions or data */
 {
 	.fromsec = { "__ksymtab*", NULL },
-	.tosec   = { INIT_SECTIONS, EXIT_SECTIONS, NULL },
+	.bad_tosec = { INIT_SECTIONS, EXIT_SECTIONS, NULL },
 	.mismatch = EXPORT_TO_INIT_EXIT,
 	.symbol_white_list = { DEFAULT_SYMBOL_WHITE_LIST, NULL },
 }
@@ -1049,9 +1050,12 @@ static const struct sectioncheck *section_mismatch(
 	const struct sectioncheck *check = &sectioncheck[0];
 
 	for (i = 0; i < elems; i++) {
-		if (match(fromsec, check->fromsec) &&
-		    match(tosec, check->tosec))
-			return check;
+		if (match(fromsec, check->fromsec)) {
+			if (check->bad_tosec[0] && match(tosec, check->bad_tosec))
+				return check;
+			if (check->good_tosec[0] && !match(tosec, check->good_tosec))
+				return check;
+		}
 		check++;
 	}
 	return NULL;
