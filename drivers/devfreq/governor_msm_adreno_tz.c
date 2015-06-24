@@ -22,6 +22,9 @@
 #include <linux/state_notifier.h>
 #include <soc/qcom/scm.h>
 #include "governor.h"
+#ifdef CONFIG_ADRENO_IDLER
+#include "adreno_idler.h"
+#endif
 
 static DEFINE_SPINLOCK(tz_lock);
 
@@ -49,6 +52,9 @@ static DEFINE_SPINLOCK(tz_lock);
 #define TZ_INIT_ID		0x6
 
 #define TAG "msm_adreno_tz: "
+
+/* Boolean to detect if pm has entered suspend mode */
+static bool suspended;
 
 /* Trap into the TrustZone, and call funcs there. */
 static int __secure_tz_entry2(u32 cmd, u32 val1, u32 val2)
@@ -88,10 +94,6 @@ static void _update_cutoff(struct devfreq_msm_adreno_tz_data *priv,
 	}
 }
 
-#ifdef CONFIG_ADRENO_IDLER
-extern int adreno_idler(struct devfreq_dev_status stats, struct devfreq *devfreq,
-		 unsigned long *freq);
-#endif
 static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 				u32 *flag)
 {
@@ -127,13 +129,14 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 	 * Force to use & record as min freq when system has
 	 * entered pm-suspend or screen-off state.
 	 */
-	if (state_suspended) {
+	if (suspended || state_suspended) {
 		*freq = devfreq->profile->freq_table[devfreq->profile->max_state - 1];
 		return 0;
 	}
 
 #ifdef CONFIG_ADRENO_IDLER
-	if (adreno_idler(stats, devfreq, freq)) {
+	if (adreno_idler_active &&
+			adreno_idler(stats, devfreq, freq)) {
 		/* adreno_idler has asked to bail out now */
 		return 0;
 	}
@@ -330,8 +333,9 @@ static int tz_suspend(struct devfreq *devfreq)
 	struct devfreq_dev_profile *profile = devfreq->profile;
 	unsigned long freq;
 
-	__secure_tz_entry2(TZ_RESET_ID, 0, 0);
 	suspended = true;
+	
+	__secure_tz_entry2(TZ_RESET_ID, 0, 0);
 
 	priv->bin.total_time = 0;
 	priv->bin.busy_time = 0;
