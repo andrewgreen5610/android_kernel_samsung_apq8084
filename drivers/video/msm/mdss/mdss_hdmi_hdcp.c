@@ -249,10 +249,6 @@ static int hdmi_hdcp_authentication_part1(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 		rc = -EINVAL;
 		goto error;
 	}
-#else
-	/* put some delay to guarantee ddc_bypass(true) behavior
-	 * in case of AP_HDCP_PART1 */
-	msleep(200);
 #endif
 	bksv = hdcp_ctrl->current_tp.bksv;
 
@@ -646,8 +642,6 @@ error:
 						HDCP_STATE_NAME);
 					break;
 				}
-				else
-					DEV_INFO("%s: BCAPS=0x%02X\n", __func__, *(ddc_data.data_buf));
 			}
 		}
 
@@ -657,10 +651,6 @@ error:
 			DEV_INFO("%s: %s: Authentication Part I successful\n",
 				__func__, HDCP_STATE_NAME);
 		}
-
-		/* put some delay to guarantee ddc_bypass(false) behavior
-		 * in case of AP_HDCP_PART1 */
-		msleep(100);
 #else
 		/* Enable HDCP Encryption */
 		DSS_REG_W(io, HDMI_HDCP_CTRL, BIT(0) | BIT(8));

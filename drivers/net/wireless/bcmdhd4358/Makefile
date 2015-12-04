@@ -51,8 +51,6 @@ ifeq ($(BUS_IFACE_PCIE),y)
 	# Debugging Pagealloc
 #	DHDCFLAGS += -DDHD_DEBUG_PAGEALLOC
 #endif
-	# Enable Log Trace
-	DHDCFLAGS += -DBUZZZ_LOG_ENABLED
 	# Enable packet audit at host side
 	DHDCFLAGS += -DDHD_PKTID_AUDIT_ENABLED
 endif
@@ -137,7 +135,8 @@ ifeq ($(CONFIG_BROADCOM_WIFI_RESERVED_MEM),y)
   DHDCFLAGS += -DENHANCED_STATIC_BUF
   DHDCFLAGS += -DSTATIC_WL_PRIV_STRUCT
 ifeq ($(BUS_IFACE_PCIE),y)
-  DHDCFLAGS += -DDHD_USE_STATIC_IOCTLBUF
+  # Use preallocated IOCTL and EVENT buffer
+  DHDCFLAGS += -DDHD_USE_STATIC_CTRLBUF
 endif
 ifeq ($(CONFIG_BCMDHD_DEBUG_PAGEALLOC),y)
 # Preallocation for memory dump
@@ -567,7 +566,7 @@ DHDOFILES := dhd_pno.o dhd_common.o dhd_ip.o dhd_custom_gpio.o dhd_custom_sec.o 
 	bcmutils.o bcmwifi_channels.o hndpmu.o linux_osl.o sbutils.o siutils.o \
 	wl_android.o wl_cfg80211.o wl_cfgp2p.o wl_cfg_btcoex.o wldev_common.o \
 	wl_linux_mon.o wl_roam.o dhd_linux_platdev.o dhd_linux_wq.o wl_cfg_btcoex.o \
-	hnd_pktq.o hnd_pktpool.o wl_cfgnan.o bcmxtlv.o dhd_buzzz.o
+	hnd_pktq.o hnd_pktpool.o wl_cfgnan.o bcmxtlv.o
 
 
 ifeq ($(BUS_IFACE_SDIO),y)

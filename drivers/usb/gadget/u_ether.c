@@ -1794,7 +1794,9 @@ struct net_device *gether_connect(struct gether *link)
 				link->close(link);
 		}
 		spin_unlock(&dev->lock);
+
 		netif_carrier_on(dev->net);
+
 		wait_for_rx_trigger = dev->rx_trigger_enabled &&
 			!link->rx_triggered;
 

@@ -205,7 +205,6 @@ struct w1_master
 #ifdef CONFIG_W1_WORKQUEUE
 	struct work_struct	work;
 	struct delayed_work	w1_dwork;
-	struct delayed_work	w1_dwork_uevent;
 #endif
 };
 
@@ -273,7 +272,6 @@ extern int w1_process(void *);
 
 #ifdef CONFIG_W1_WORKQUEUE
 extern void w1_work(struct work_struct *work);
-extern void w1_work_uevent(struct work_struct *work);
 extern void w1_irqwork(struct work_struct *irqwork);
 extern struct w1_master *w1_gdev;
 #endif

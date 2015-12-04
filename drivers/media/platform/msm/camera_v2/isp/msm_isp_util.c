@@ -147,11 +147,11 @@ int msm_isp_update_bandwidth(enum msm_isp_hw_client client,
 		&(msm_isp_bus_client_pdata.usecase[
 		  isp_bandwidth_mgr.bus_vector_active_idx]);
 	if (isp_recording_hint == 1) {
-		pr_err("%s: [syscamera] RECORD client %d\n", __func__, client);
+		pr_err("%s: [syscamera] RECORD\n", __func__);
 		path->vectors[0].ab = MSM_ISP_MIN_AB_RECORD;
 		path->vectors[0].ib = MSM_ISP_MIN_IB_RECORD;
 	} else {
-		pr_err("%s: [syscamera] CAMERA client %d\n", __func__, client);
+		pr_err("%s: [syscamera] CAMERA\n", __func__);
 		path->vectors[0].ab = MSM_ISP_MIN_AB;
 		path->vectors[0].ib = MSM_ISP_MIN_IB;
 	}
