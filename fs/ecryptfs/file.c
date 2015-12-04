@@ -261,7 +261,7 @@ out:
 		if (!(crypt_stat->flags & ECRYPTFS_DEK_IS_SENSITIVE) &&
 				((S_ISDIR(parent_inode->i_mode)) &&
 						(parent_crypt_stat->flags & ECRYPTFS_DEK_IS_SENSITIVE))) {
-			rc = ecryptfs_sdp_set_sensitive(dentry);
+			ecryptfs_sdp_set_sensitive(dentry);
 		}
 	}
 #endif

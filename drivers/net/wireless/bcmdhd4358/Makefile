@@ -51,6 +51,8 @@ ifeq ($(BUS_IFACE_PCIE),y)
 	# Debugging Pagealloc
 #	DHDCFLAGS += -DDHD_DEBUG_PAGEALLOC
 #endif
+	# Enable packet audit at host side
+	DHDCFLAGS += -DDHD_PKTID_AUDIT_ENABLED
 endif
 
 
@@ -133,7 +135,8 @@ ifeq ($(CONFIG_BROADCOM_WIFI_RESERVED_MEM),y)
   DHDCFLAGS += -DENHANCED_STATIC_BUF
   DHDCFLAGS += -DSTATIC_WL_PRIV_STRUCT
 ifeq ($(BUS_IFACE_PCIE),y)
-  DHDCFLAGS += -DDHD_USE_STATIC_IOCTLBUF
+  # Use preallocated IOCTL and EVENT buffer
+  DHDCFLAGS += -DDHD_USE_STATIC_CTRLBUF
 endif
 ifeq ($(CONFIG_BCMDHD_DEBUG_PAGEALLOC),y)
 # Preallocation for memory dump
@@ -160,7 +163,7 @@ DHDCFLAGS += -DCONFIG_CONTROL_PM
 DHDCFLAGS += -DCONFIG_HAS_WAKELOCK
 
 # Used short dwell time during initial scan
-DHDCFLAGS += -DUSE_INITIAL_SHORT_DWELL_TIME
+# DHDCFLAGS += -DUSE_INITIAL_SHORT_DWELL_TIME
 
 # Japan ccode revision will be fixed by nvram's value
 DHDCFLAGS += -DKEEP_JP_REGREV

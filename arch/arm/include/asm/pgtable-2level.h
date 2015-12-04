@@ -161,6 +161,8 @@
 #define pud_clear(pudp)		do { } while (0)
 #define set_pud(pud,pudp)	do { } while (0)
 
+extern int boot_mode_security;
+
 static inline pmd_t *pmd_offset(pud_t *pud, unsigned long addr)
 {
 	return (pmd_t *)pud;
@@ -182,7 +184,7 @@ static inline void copy_pmd(pmd_t *pmdpd, pmd_t *pmdps)
 	unsigned long tima_wr_out;
 	unsigned long pmd_base;
 
-	if (tima_is_pg_protected((unsigned long) pmdpd) == 0) {
+	if (tima_is_pg_protected((unsigned long) pmdpd) == 0 && boot_mode_security == 0) {
 		pmdpd[0] = pmdps[0];
 		pmdpd[1] = pmdps[1];
 		flush_pmd_entry(pmdpd);

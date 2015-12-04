@@ -1131,8 +1131,7 @@ hw_died:
 	}
 	spin_unlock(&xhci->lock);
 
-	if (!mxhci->xhci_remove_flag)
-		tasklet_schedule(&mxhci->bh);
+	tasklet_schedule(&mxhci->bh);
 
 	return IRQ_HANDLED;
 }

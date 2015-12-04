@@ -849,7 +849,7 @@ static void mdss_mdp_perf_calc_ctl(struct mdss_mdp_ctl *ctl,
 			perf->bw_ctl = apply_fudge_factor(perf->bw_ctl,
 				&mdss_res->ib_factor);
 	}
-/* To avoid an underrun on HDMI TC, multiple additional factor value */
+
 	if(ctl->intf_type == MDSS_INTF_HDMI)
 		perf->bw_ctl = fudge_factor(perf->bw_ctl, 10, 6);
 

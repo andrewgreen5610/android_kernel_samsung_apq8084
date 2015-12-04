@@ -112,8 +112,9 @@ int ecryptfs_get_sdp_dek(struct ecryptfs_crypt_stat *crypt_stat)
 			if (crypt_stat->sdp_dek.type != DEK_TYPE_PLAIN) {
 				rc = dek_decrypt_dek_efs(crypt_stat->userid, &crypt_stat->sdp_dek, &DEK);
 			} else {
-				DEK_LOGE("Error, DEK already plaintext");
+				DEK_LOGE("DEK already plaintext, skip decryption");
 				rc = 0;
+				goto out;
 			}
 			if (rc < 0) {
 				DEK_LOGE("Error decypting dek; rc = [%d]\n", rc);

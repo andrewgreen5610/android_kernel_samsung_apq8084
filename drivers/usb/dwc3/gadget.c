@@ -1656,8 +1656,6 @@ static int dwc3_gadget_run_stop(struct dwc3 *dwc, int is_on)
 	u32			timeout = 500;
 	ktime_t start, diff;
 
-	printk(KERN_DEBUG"usb: %s is_on:%d\n",__func__, is_on);
-
 	reg = dwc3_readl(dwc->regs, DWC3_DCTL);
 	if (is_on) {
 		if (dwc->revision <= DWC3_REVISION_187A) {
