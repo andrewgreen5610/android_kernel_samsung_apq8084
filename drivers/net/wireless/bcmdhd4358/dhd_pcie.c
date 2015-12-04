@@ -1350,8 +1350,13 @@ int dhd_bus_rxctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 	if (rxlen) {
 		DHD_CTL(("%s: resumed on rxctl frame, got %d\n", __FUNCTION__, rxlen));
 
+		BUZZZ_LOG(DHD_BUS_RXCTL_ONE, 2, bus->ioct_resp_prev.resp_len,
+			bus->ioct_resp_prev.cmn_hdr.request_id);
 
+		BUZZZ_LOG(DHD_BUS_RXCTL_TWO, 2, ((ioctl_comp_resp_msg_t *)msg)->resp_len,
+			((ioctl_comp_resp_msg_t *)msg)->cmn_hdr.request_id);
 
+		memcpy(&bus->ioct_resp_prev, msg, sizeof(ioctl_comp_resp_msg_t));
 	} else if (timeleft == 0) {
 		DHD_ERROR(("%s: resumed on timeout\n", __FUNCTION__));
 #if defined(DHD_DEBUG) && defined(CUSTOMER_HW4)
@@ -1496,8 +1501,8 @@ dhdpcie_checkdied(dhd_bus_t *bus, char *data, uint size)
 	if (DHD_NOCHECKDIED_ON())
 		return 0;
 
-/*	buzzz_log_disable();
-*/
+	buzzz_log_disable();
+
 	if (data == NULL) {
 		/*
 		 * Called after a rx ctrl timeout. "data" is NULL.
@@ -1666,6 +1671,8 @@ done:
 	if (console_buffer)
 		MFREE(bus->dhd->osh, console_buffer, console_size);
 
+	DHD_ERROR(("hit locker->inuse %d times\n", bus->dhd->pktidassert));
+	buzzz_panic(1);
 	return bcmerror;
 }
 
@@ -3790,17 +3797,15 @@ dhd_update_txflowrings(dhd_pub_t *dhd)
 	flow_ring_node_t *flow_ring_node;
 	struct dhd_bus *bus = dhd->bus;
 
+	BUZZZ_LOG(UPDATE_TXFLOWRINGS_BGN, 0);
 	for (item = dll_head_p(&bus->const_flowring);
 	         !dll_end(&bus->const_flowring, item); item = next) {
-		if (dhd->hang_was_sent) {		
-			break;
-		}
-
 		next = dll_next_p(item);
 
 		flow_ring_node = dhd_constlist_to_flowring(item);
 		dhd_prot_update_txflowring(dhd, flow_ring_node->flowid, flow_ring_node->prot_info);
 	}
+	BUZZZ_LOG(UPDATE_TXFLOWRINGS_END, 0);
 }
 
 
@@ -4045,11 +4050,6 @@ dhdpci_bus_read_frames(dhd_bus_t *bus)
 	 * processing RX frames without RX bound
 	 */
 	more |= dhd_prot_process_msgbuf_rxcpl(bus->dhd, dhd_rxbound);
-	
-	/* don't talk to the dongle if fw is about to be reloaded */
-	if (bus->dhd->hang_was_sent) {
-		more = FALSE;
-	}
 	DHD_PERIM_UNLOCK(bus->dhd); /* Release the perimeter lock */
 
 	return more;

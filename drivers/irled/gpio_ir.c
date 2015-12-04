@@ -50,8 +50,6 @@ bool gir_boost_disable = false;
 spinlock_t gir_lock;
 /****************************************************************/
 
-#define GIR_ERR(...)	pr_err(__VA_ARGS__)
-
 // approximately time
 static inline unsigned long __timer_delay_get_time(cycles_t count) {
 	return (count) * (1000000000UL / arm_delay_ops.ticks_per_jiffy) / 100;
@@ -184,6 +182,7 @@ static DEVICE_ATTR(ir_send, 0664, remocon_show, remocon_store);
 #endif
 static DEVICE_ATTR(ir_send_result, 0444, remocon_ack, NULL);
 
+
 static struct attribute *gpio_ir_attributes[] = {
 	&dev_attr_ir_send.attr,
 	&dev_attr_ir_send_result.attr,
@@ -196,6 +195,7 @@ static struct attribute_group gpio_ir_attr_group = {
 
 /*****************************************************************/
 
+
 #ifdef CONFIG_OF
 int ir_gpio_parse_dt(struct device_node *node, struct gpio_ir_info_t *info)
 {
@@ -205,23 +205,19 @@ int ir_gpio_parse_dt(struct device_node *node, struct gpio_ir_info_t *info)
 	int ret;
 
 	gpiopin = of_get_named_gpio(np, "samsung,irda_fet_control", 0);
-	if (gpiopin < 0) {
-		GIR_ERR("[GPIO_IR][%s] Error to get ir control pin (%d)\n", __func__, gpiopin);
-		ret = gpiopin;
-		goto error;
-	}
 
 	ret = of_property_read_u32(np, "samsung,ir_led_en_gpio", &en_gpiopin);
 	if (ret < 0) {
-		GIR_ERR("[GPIO_IR][%s] Error to get ir enable pin (%d)\n", __func__, ret);
+		pr_err("[%s]: no ir_led_en \n", __func__);
+		info->en_gpio = NO_PIN_DETECTED;
 		goto error;
 	}
 	info->en_gpio = en_gpiopin;
 	info->gpio = gpiopin;
 
-	return 0;
+	return 1;
 error:
-	return ret;
+	return -ENODEV;
 }
 #endif
 
@@ -242,7 +238,7 @@ static void irled_power_init(int power_gpio)
 
 	rc = gpio_request(power_gpio, "ir_led_en");
 	if (rc)
-		GIR_ERR("%s: Ir led en error : %d\n", __func__, rc);
+		pr_err("%s: Ir led en error : %d\n", __func__, rc);
 	else
 		gpio_direction_output(power_gpio, 0);
 
@@ -282,9 +278,6 @@ static enum hrtimer_restart gpio_ir_timeout_type1(struct hrtimer *timer)
 	cycles_t start_cycle;
 	cycles_t diff_cycle;		// for post correction
 	ktime_t diff_time;		// for post correction
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
-	bool bcpu_collision = false;
-#endif
 #endif
 
 	tinfo = container_of(timer, struct gpio_ir_timer_info_t, timer);
@@ -299,88 +292,41 @@ static enum hrtimer_restart gpio_ir_timeout_type1(struct hrtimer *timer)
 		return HRTIMER_NORESTART;
 	}
 
-	tinfo->bstart = true;
+	if (!tinfo->bstart)
+		tinfo->bstart = true;
 
 	cpu_id = raw_smp_processor_id();
 
 	/* check sound & tsp processor */
 	if ((info->cur_sound_cpu  && *(info->cur_sound_cpu) == cpu_id) ||
 		(info->cur_tsp_cpu && *(info->cur_tsp_cpu) == cpu_id)) {
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
-		spin_lock(&info->lock_tcount);
-		if (info->timer_mask != BIT(cpu_id)) {
-			info->timer_mask  &= ~(unsigned int)(BIT(cpu_id));
-			spin_unlock(&info->lock_tcount);
-			bcpu_collision = true;
-			goto out;
-		}
-		spin_unlock(&info->lock_tcount);
-#else
-		spin_lock(&info->lock_tcount);
-		if (info->timer_count > 1) {
-			info->timer_count--;
-			spin_unlock(&info->lock_tcount);
+		if (atomic_read(&info->timer_count) > 1) {
+			atomic_dec(&info->timer_count);
 			tinfo->bend = true;
 			local_irq_restore(flags);
 			return HRTIMER_NORESTART;
 		}
-		spin_unlock(&info->lock_tcount);
-#endif
 	}
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
-	else {
-		spin_lock(&info->lock_tcount);
-		info->timer_mask |= (unsigned int)(BIT(cpu_id));
-		spin_unlock(&info->lock_tcount);
-	}
-#endif
 
 #ifdef GPIO_IR_MULTI_TIMER_PRECALL
 	if (!info->bir_init_comp) {
-		local_irq_restore(flags);
 		hrtimer_start(timer, ktime_set(0, 10000), HRTIMER_MODE_REL);
+		local_irq_restore(flags);
 		return HRTIMER_NORESTART;
-	}
-
-	if (info->bhrtimer_multi_run_check && !info->btimer_total_run) {
-		for (i = 0; i < NR_CPUS; i++) {
-			if (info->tinfo[i].bwait && !info->tinfo[i].bstart) {
-				local_irq_restore(flags);
-				hrtimer_start(timer, ktime_set(0, 10000), HRTIMER_MODE_REL);
-				return HRTIMER_NORESTART;
-			}
-		}
-		info->btimer_total_run = true;
 	}
 #endif
 
 	/**************************************/
+	if (info->bvalid_timer_run)
+		goto out;
 
 	goto running;
 
 out:
-	local_irq_restore(flags);
+	if (!info->hm_start_time_save)
+		while(!info->hm_start_time_save) udelay(1);
 
-	if (!info->hm_start_time_save) {
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
-		if (bcpu_collision) {
-			hrtimer_start(timer, ktime_set(0, 100000), HRTIMER_MODE_REL);
-			goto exit;
-		}
-		else
-#endif
-		{
-			do {
-				udelay(1);
-			} while(!info->hm_start_time_save);
-		}
-	}
-
-	if (tinfo->pos >= info->data_pos
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
-		&& !bcpu_collision
-#endif
-		) {
+	if (tinfo->pos >= info->data_pos) {
 		hrtimer_start(timer, ktime_set(0, 10000), HRTIMER_MODE_REL);
 	} else {
 		do {
@@ -390,29 +336,24 @@ out:
 		if (tinfo->pos < info->count) {
 			hrtimer_start(timer,
 				ktime_add_safe(info->hm_start_time,
-				ktime_sub_ns(info->ktime_delay[tinfo->pos], cpu_id * 2000)),
+				ktime_sub_ns(info->ktime_delay[tinfo->pos], cpu_id * 1000)),
 				HRTIMER_MODE_ABS);
 		} else {
 			tinfo->bend = true;
+			goto exit;
 		}
 	}
 
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
 exit:
-#endif
-	//local_irq_restore(flags);
+	local_irq_restore(flags);
 	return HRTIMER_NORESTART;
 
 running:
-	spin_lock(&info->lock_trun);
-	if (info->bvalid_timer_run) {
-		spin_unlock(&info->lock_trun);
+	if (!spin_trylock(&gir_lock)) {
 		goto out;
 	}
-	info->bvalid_timer_run = true;
-	spin_unlock(&info->lock_trun);
-
-#else	// #ifdef GPIO_IR_MULTI_TIMER
+	info->bvalid_timer_run= true;
+#else
 	spin_lock_irqsave(&gir_lock, flags);
 #endif
 
@@ -465,16 +406,14 @@ running:
 #ifdef GPIO_IR_MULTI_TIMER
 	/***********************************************/
 	// post correction
-	if (info->bhrtimer_multi_post_correct) {
-		diff_time = ktime_sub(timer->base->get_time(),
-					ktime_add(info->hm_start_time, info->ktime_delay[info->data_pos]));
-		if ( diff_time.tv64 > 0)
-			info->hm_start_time = ktime_add(info->hm_start_time, diff_time);
+	diff_time = ktime_sub(timer->base->get_time(),
+				ktime_add(info->hm_start_time, info->ktime_delay[info->data_pos]));
+	if ( diff_time.tv64 > 0)
+		info->hm_start_time = ktime_add(info->hm_start_time, diff_time);
 
-		diff_cycle = start_cycle - (info->hm_start_cycle + info->delay_cycles[info->data_pos]);
-		if (diff_cycle < 1000000)
-			info->hm_start_cycle += diff_cycle;
-	}
+	diff_cycle = start_cycle - (info->hm_start_cycle + info->delay_cycles[info->data_pos]);
+	if (diff_cycle < 1000000)
+		info->hm_start_cycle += diff_cycle;
 	/***********************************************/
 #endif
 
@@ -485,7 +424,7 @@ running:
 		tinfo->pos = info->data_pos;
 		hrtimer_start(timer,
 			ktime_add_safe(info->hm_start_time,
-			ktime_sub_ns(info->ktime_delay[info->data_pos], cpu_id * 2000)),
+			ktime_sub_ns(info->ktime_delay[info->data_pos], cpu_id * 1000)),
 			HRTIMER_MODE_ABS);
 		goto no_completed;
 	} else {
@@ -516,10 +455,8 @@ completed:
 
 no_completed:
 #ifdef GPIO_IR_MULTI_TIMER
-	spin_lock(&info->lock_trun);
 	info->bvalid_timer_run = false;
-	spin_unlock(&info->lock_trun);
-
+	spin_unlock(&gir_lock);
 	local_irq_restore(flags);
 #else
 	spin_unlock_irqrestore(&gir_lock, flags);
@@ -542,9 +479,6 @@ static enum hrtimer_restart gpio_ir_timeout_type2(struct hrtimer *timer)
 	cycles_t start_cycle;
 	cycles_t diff_cycle;		// for post correction
 	ktime_t diff_time;		// for post correction
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
-	bool bcpu_collision = false;
-#endif
 #endif
 
 	tinfo = container_of(timer, struct gpio_ir_timer_info_t, timer);
@@ -559,88 +493,50 @@ static enum hrtimer_restart gpio_ir_timeout_type2(struct hrtimer *timer)
 		return HRTIMER_NORESTART;
 	}
 
-	tinfo->bstart = true;
+	if (!tinfo->bstart)
+		tinfo->bstart = true;
 
 	cpu_id = raw_smp_processor_id();
 
-	/* check sound & tsp processor */
-	if ((info->cur_sound_cpu  && *(info->cur_sound_cpu) == cpu_id) ||
-		(info->cur_tsp_cpu && *(info->cur_tsp_cpu) == cpu_id)) {
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
-		spin_lock(&info->lock_tcount);
-		if (info->timer_mask != BIT(cpu_id)) {
-			info->timer_mask  &= ~(unsigned int)(BIT(cpu_id));
-			spin_unlock(&info->lock_tcount);
-			bcpu_collision = true;
-			goto out;
-		}
-		spin_unlock(&info->lock_tcount);
-#else
-		spin_lock(&info->lock_tcount);
-		if (info->timer_count > 1) {
-			info->timer_count--;
-			spin_unlock(&info->lock_tcount);
+	/* check sound processor */
+	if (info->cur_sound_cpu  && *(info->cur_sound_cpu) == cpu_id) {
+		if (atomic_read(&info->timer_count) > 1) {
+			atomic_dec(&info->timer_count);
 			tinfo->bend = true;
 			local_irq_restore(flags);
 			return HRTIMER_NORESTART;
 		}
-		spin_unlock(&info->lock_tcount);
-#endif
 	}
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
-	else {
-		spin_lock(&info->lock_tcount);
-		info->timer_mask |= (unsigned int)(BIT(cpu_id));
-		spin_unlock(&info->lock_tcount);
+
+	/* check sound processor */
+	if (info->cur_tsp_cpu && *(info->cur_tsp_cpu) == cpu_id) {
+		if (atomic_read(&info->timer_count) > 1) {
+			atomic_dec(&info->timer_count);
+			tinfo->bend = true;
+			local_irq_restore(flags);
+			return HRTIMER_NORESTART;
+		}
 	}
-#endif
 
 #ifdef GPIO_IR_MULTI_TIMER_PRECALL
 	if (!info->bir_init_comp) {
-		local_irq_restore(flags);
 		hrtimer_start(timer, ktime_set(0, 10000), HRTIMER_MODE_REL);
+		local_irq_restore(flags);
 		return HRTIMER_NORESTART;
-	}
-
-	if (info->bhrtimer_multi_run_check && !info->btimer_total_run) {
-		for (i = 0; i < NR_CPUS; i++) {
-			if (info->tinfo[i].bwait && !info->tinfo[i].bstart) {
-				local_irq_restore(flags);
-				hrtimer_start(timer, ktime_set(0, 10000), HRTIMER_MODE_REL);
-				return HRTIMER_NORESTART;
-			}
-		}
-		info->btimer_total_run = true;
 	}
 #endif
 
 	/**************************************/
+	if (info->bvalid_timer_run)
+		goto out;
 
 	goto running;
 
 out:
-	local_irq_restore(flags);
+	if (!info->hm_start_time_save)
+		while(!info->hm_start_time_save) udelay(1);
 
-	if (!info->hm_start_time_save) {
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
-		if (bcpu_collision) {
-			hrtimer_start(timer, ktime_set(0, 100000), HRTIMER_MODE_REL);
-			goto exit;
-		}
-		else
-#endif
-		{
-			do {
-				udelay(1);
-			} while(!info->hm_start_time_save);
-		}
-	}
-
-	if (tinfo->pos >= info->data_pos
-#ifdef HRTIMER_MULTI_CPU_COLLISION_NO_RELEASE
-		&& !bcpu_collision
-#endif
-		) {
+	if (tinfo->pos >= info->data_pos) {
 		hrtimer_start(timer, ktime_set(0, 10000), HRTIMER_MODE_REL);
 	} else {
 		if (tinfo->pos == -1) {
@@ -658,26 +554,24 @@ out:
 		if (tinfo->pos < info->count) {
 			hrtimer_start(timer,
 				ktime_add_safe(info->hm_start_time,
-				ktime_sub_ns(info->ktime_delay[tinfo->pos], cpu_id * 2000)),
+				ktime_sub_ns(info->ktime_delay[tinfo->pos], cpu_id * 1000)),
 				HRTIMER_MODE_ABS);
 		} else {
 			tinfo->bend = true;
+			goto exit;
 		}
 	}
 
 exit:
-	//local_irq_restore(flags);
+	local_irq_restore(flags);
 	return HRTIMER_NORESTART;
 
 running:
-	spin_lock(&info->lock_trun);
-	if (info->bvalid_timer_run) {
-		spin_unlock(&info->lock_trun);
+	if (!spin_trylock(&gir_lock)) {
 		goto out;
 	}
-	info->bvalid_timer_run = true;
-	spin_unlock(&info->lock_trun);
-#else	// #ifdef GPIO_IR_MULTI_TIMER
+	info->bvalid_timer_run= true;
+#else
 	spin_lock_irqsave(&gir_lock, flags);
 #endif
 
@@ -736,22 +630,20 @@ running:
 #ifdef GPIO_IR_MULTI_TIMER
 				/***********************************************/
 				// post correction
-				if (info->bhrtimer_multi_post_correct) {
-					diff_time = ktime_sub(timer->base->get_time(),
-								ktime_add(info->hm_start_time, info->ktime_delay[info->data_pos-1]));
-					if ( diff_time.tv64 > 0)
-						info->hm_start_time = ktime_add(info->hm_start_time, diff_time);
+				diff_time = ktime_sub(timer->base->get_time(),
+							ktime_add(info->hm_start_time, info->ktime_delay[info->data_pos-1]));
+				if ( diff_time.tv64 > 0)
+					info->hm_start_time = ktime_add(info->hm_start_time, diff_time);
 
-					diff_cycle = start_cycle - (info->hm_start_cycle + info->delay_cycles[info->data_pos-1]);
-					if (diff_cycle < 1000000)
-						info->hm_start_cycle += diff_cycle;
-				}
+				diff_cycle = start_cycle - (info->hm_start_cycle + info->delay_cycles[info->data_pos-1]);
+				if (diff_cycle < 1000000)
+					info->hm_start_cycle += diff_cycle;
 				/***********************************************/
 
 				tinfo->pos = info->data_pos;
 				hrtimer_start(timer,
 					ktime_add_safe(info->hm_start_time,
-					ktime_sub_ns(info->ktime_delay[info->data_pos], cpu_id * 2000)),
+					ktime_sub_ns(info->ktime_delay[info->data_pos], cpu_id * 1000)),
 					HRTIMER_MODE_ABS);
 				goto no_completed;
 #else
@@ -781,10 +673,8 @@ completed:
 
 no_completed:
 #ifdef GPIO_IR_MULTI_TIMER
-	spin_lock(&info->lock_trun);
 	info->bvalid_timer_run = false;
-	spin_unlock(&info->lock_trun);
-
+	spin_unlock(&gir_lock);
 	local_irq_restore(flags);
 #else
 	spin_unlock_irqrestore(&gir_lock, flags);
@@ -794,22 +684,16 @@ no_completed:
 }
 
 /****************************************************************/
-#define GPIO_IR_FREQ		1267200
+
 static int cpufreq_gpioir_notifier_policy(struct notifier_block *nb,
 		unsigned long val, void *data)
 {
 	struct cpufreq_policy *policy = (struct cpufreq_policy *)data;
 
-	if (val != CPUFREQ_INCOMPATIBLE)
+	if (val != CPUFREQ_ADJUST)
 		return 0;
 
-	if (policy->max < GPIO_IR_FREQ)
-		policy->min = policy->max;
-	else if (policy->min <= GPIO_IR_FREQ && policy->max >= GPIO_IR_FREQ)
-		policy->min = policy->max = GPIO_IR_FREQ;
-	else
-		policy->max = policy->min;
-
+	policy->min = policy->max;
 	return 0;
 }
 
@@ -818,17 +702,18 @@ static struct notifier_block notifier_policy_block = {
 };
 /****************************************************************/
 
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
 static void gpio_ir_post_run(struct work_struct *work)
 {
 	struct gpio_ir_info_t *info = container_of(work, struct gpio_ir_info_t,
 						post_run_work);
 	int ret = 0;
 
+	cpu_idle_poll_ctrl(false);
+
 	ret = cpufreq_unregister_notifier(&notifier_policy_block,
 						CPUFREQ_POLICY_NOTIFIER);
 	if (ret != 0) {
-		GIR_ERR("[GPIO_IR][%s] cpufreq_unregister_notifier Error!\n", __func__);
+		pr_err("[GPIO_IR][%s] cpufreq_unregister_notifier Error!\n", __func__);
 	}
 
 #if defined(CONFIG_SMP) && defined(CONFIG_HOTPLUG_CPU)
@@ -848,7 +733,6 @@ static void gpio_ir_post_run(struct work_struct *work)
 	return;
 
 }
-#endif
 
 static enum hrtimer_restart gpio_ir_timeout_memfree(struct hrtimer *timer)
 {
@@ -864,9 +748,7 @@ static enum hrtimer_restart gpio_ir_timeout_memfree(struct hrtimer *timer)
 		GIR_FREE(info->data_count);
 	}
 
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
 	schedule_work(&info->post_run_work);
-#endif
 
 	return HRTIMER_NORESTART;
 }
@@ -895,30 +777,32 @@ static void
 	unsigned long delay_cum_correct;
 	unsigned long delay_cum_sec;
 	unsigned long delay_cum_nsec;
+#ifdef GPIO_IR_MULTI_TIMER_PRECALL
+	unsigned long timer_remain_time;
 #endif
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
+#endif
 	bool bpolicy_set_error = false;
+
+	info->check_ir_send = 0;			//send result init
+
+#if 0	//#ifdef GPIO_IR_MULTI_TIMER
+	start_cycle = get_cycles();
+	start_delay_cycles = __timer_delay_get_count(info->start_delay);
 #endif
 
-	info->check_ir_send = false;			//send result init
-
+	irled_power_onoff(1, info->en_gpio);
 	/******************************************/
 	/* IR Policy Set */
 	/******************************************/
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
-	if (!info->bir_policy_set)
-#endif
-	{
+	if (!info->bir_policy_set) {
 #ifdef CONFIG_CPU_BOOST
 		gir_boost_disable = true;			// for cpu boost disable
 #endif
 		pm_qos_update_request(&info->pm_qos_req, (s32)info->qos_delay);
 
 #if defined(CONFIG_SMP) && defined(CONFIG_HOTPLUG_CPU)
-		if ((ret = gpio_ir_cpu_up(HRTIMER_MULTI_CPU_COUNT))) {
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
+		if ((ret = gpio_ir_cpu_up())) {
 			bpolicy_set_error = true;
-#endif
 			goto ERROR_AFTER_PM_QOS_DISABLE;
 		}
 #ifdef CONFIG_ARCH_MSM
@@ -928,22 +812,21 @@ static void
 		ret = cpufreq_register_notifier(&notifier_policy_block,
 							CPUFREQ_POLICY_NOTIFIER);
 		if (ret != 0) {
-			GIR_ERR("[GPIO_IR][%s] cpufreq_register_notifier Error!\n", __func__);
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
+			pr_err("[GPIO_IR][%s] cpufreq_register_notifier Error!\n", __func__);
 			bpolicy_set_error = true;
-#endif
 			goto ERROR_AFTER_HOTPLUG_DISABLE;
 		}
 
 		for_each_online_cpu(i) {
 			cpufreq_update_policy(i);
 		}
+
+
+		cpu_idle_poll_ctrl(true);
 	}
 
 	/******************************************/
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
 	info->bir_policy_set = true;
-#endif
 	/******************************************/
 
 	info->period = IR_FREQ_UNIT_GHZ / (ulong)info->freq;
@@ -1036,7 +919,7 @@ static void
 				else if (calc_low_delay > 200000)
 					delay_cum_correct = delay_cum - 150000;
 				else if (calc_low_delay > 100000)
-					delay_cum_correct = delay_cum - 50000;
+					delay_cum_correct = delay_cum - 500000;
 				else
 					delay_cum_correct = delay_cum - (calc_low_delay/2);
 
@@ -1091,14 +974,21 @@ static void
 #endif
 	/******************************************/
 
+	//info->data_pos = 0;
+	//info->bcompleted = false;
 #ifdef GPIO_IR_MULTI_TIMER
 	for (i = (NR_CPUS - 1);  i >= 0; i--) {
-		info->tinfo[i].pos = -1;
-		info->tinfo[i].bwait = false;
+		info->tinfo[i].pos = 0;
 		info->tinfo[i].bstart = false;
 		info->tinfo[i].bend = false;
+		if (!cpu_online(i)) {
+			pr_err("[GPIO_IR][%s] cpu(%d) not online !\n", __func__, i);
+			bpolicy_set_error = true;
+			info->bir_policy_set = false;
+			goto ERROR_AFTER_POLL_ENABLE_SET;
+		}
 
-		//hrtimer_init_gpio_ir(&info->tinfo[i].timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS, i);
+		hrtimer_init_gpio_ir(&info->tinfo[i].timer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS, i);
 		if (info->partial_timer_type == 2)
 			info->tinfo[i].timer.function = gpio_ir_timeout_type2;
 		else
@@ -1106,39 +996,30 @@ static void
 	}
 
 #ifdef GPIO_IR_MULTI_TIMER_PRECALL
-	info->timer_count = 0;
-	info->timer_mask = 0;
+	timer_remain_time = __timer_delay_get_time(get_cycles() - info->start_cycle);
+	if (timer_remain_time < (info->start_delay - 10000))
+		timer_remain_time = info->start_delay -10000 - timer_remain_time;
+	else
+		timer_remain_time = 0;
+
+	atomic_set(&info->timer_count, 0);
 	for (i = (NR_CPUS - 1);  i >= 0; i--) {
-		if (cpu_online(i)) {
-			hrtimer_start_gpio_ir(&info->tinfo[i].timer,
-				ktime_add_ns(info->start_ktime, info->start_delay + ((3-i) * 2000)),
-				0, HRTIMER_MODE_ABS, 1);
-			info->tinfo[i].bwait = true;
-			info->timer_count++;
-			info->timer_mask |= BIT(i);
-			if (info->timer_count == HRTIMER_MULTI_CPU_COUNT)
-				break;
-		}
+		hrtimer_start_gpio_ir(&info->tinfo[i].timer,
+			ktime_set(0, timer_remain_time + ((3 - i) * 1000)),
+			0, HRTIMER_MODE_REL, 1);
+		atomic_inc(&info->timer_count);
 	}
 
-	irled_power_onoff(1, info->en_gpio);
-
+	__gpio_ir_timer_delay_from_start(info->start_cycle, info->start_delay_cycles);
 	info->bir_init_comp = true;
 #else
 	__gpio_ir_timer_delay_from_start(info->start_cycle, info->start_delay_cycles);
 
-	info->timer_count = 0;
-	info->timer_mask = 0;
+	atomic_set(&info->timer_count, 0);
 	for (i = (NR_CPUS - 1);  i >= 0; i--) {
-		if (cpu_online(i)) {
-			hrtimer_start_gpio_ir(&info->tinfo[i].timer,
-				ktime_set(0, 0), 0, HRTIMER_MODE_REL, 1);
-			info->tinfo[i].bwait = true;
-			info->timer_count++;
-			info->timer_mask |= BIT(i);
-			if (info->timer_count == HRTIMER_MULTI_CPU_COUNT)
-				break;
-		}
+		hrtimer_start_gpio_ir(&info->tinfo[i].timer,
+			ktime_set(0, ((3 - i) * 1000)), 0, HRTIMER_MODE_REL, 1);
+		atomic_inc(&info->timer_count);
 	}
 #endif
 #else	// #ifdef GPIO_IR_MULTI_TIMER
@@ -1153,18 +1034,17 @@ static void
 	/******************************************/
 	wait_for_completion(&info->ir_send_comp);
 
-	info->check_ir_send = true;			//send success
+	info->check_ir_send = 1;			//send success
 
-	irled_power_onoff(0, info->en_gpio);
-
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
+ERROR_AFTER_POLL_ENABLE_SET:
 	if (bpolicy_set_error)
-#endif
-	{
+		cpu_idle_poll_ctrl(false);
+
+	if (bpolicy_set_error) {
 		ret = cpufreq_unregister_notifier(&notifier_policy_block,
 							CPUFREQ_POLICY_NOTIFIER);
 		if (ret != 0) {
-			GIR_ERR("[GPIO_IR][%s] cpufreq_unregister_notifier Error!\n", __func__);
+			pr_err("[GPIO_IR][%s] cpufreq_unregister_notifier Error!\n", __func__);
 			goto ERROR_AFTER_HOTPLUG_DISABLE;
 		}
 	}
@@ -1172,10 +1052,7 @@ static void
 ERROR_AFTER_HOTPLUG_DISABLE:
 
 #if defined(CONFIG_SMP) && defined(CONFIG_HOTPLUG_CPU)
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
-	if (bpolicy_set_error)
-#endif
-	{
+	if (bpolicy_set_error) {
 		cpu_hotplug_enable();
 #ifdef CONFIG_ARCH_MSM
 		rq_info.hotplug_disabled = 0;
@@ -1185,16 +1062,15 @@ ERROR_AFTER_HOTPLUG_DISABLE:
 	/******************************************/
 
 ERROR_AFTER_PM_QOS_DISABLE:
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
 	if (bpolicy_set_error)
-#endif
 		pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 
+	irled_power_onoff(0, info->en_gpio);
+
 #ifdef CONFIG_CPU_BOOST
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
-	if (bpolicy_set_error)
-#endif
+	if (bpolicy_set_error) {
 		gir_boost_disable = false;			// for cpu boost disable
+	}
 #endif
 
 	return;
@@ -1250,16 +1126,11 @@ static ssize_t remocon_store(
 
 #ifdef GPIO_IR_MULTI_TIMER
 	info->start_cycle = get_cycles();
-	info->start_ktime = info->tinfo[0].timer.base->get_time();
-#ifndef GPIO_IR_MULTI_TIMER_PRECALL
 	info->start_delay_cycles = __timer_delay_get_count(info->start_delay);
-#endif
 #endif
 
 	hrtimer_cancel(&info->memfree_timer);
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
 	cancel_work_sync(&info->post_run_work);
-#endif
 
 #ifdef GPIO_IR_MULTI_TIMER
 	info->cur_sound_cpu = NULL;
@@ -1286,21 +1157,22 @@ static ssize_t remocon_store(
 	GIR_MALLOC(info->ktime_delay, sizeof(ktime_t) * IR_DATA_SIZE);
 	GIR_MALLOC(info->data_count, sizeof(unsigned long) * IR_DATA_SIZE);
 
+	memset(info->data, 0, sizeof(unsigned int) * IR_DATA_SIZE);
+
 	/*******************************************/
 	/* Init. IR Data */
-	memset(info->data, 0, sizeof(unsigned int) * IR_DATA_SIZE);
 	info->count  = 0;
 	info->freq = 0;
 	info->data_pos = 0;
 	info->bcompleted = false;
 #ifdef GPIO_IR_MULTI_TIMER
 	info->bvalid_timer_run = false;
+	//info->hm_start_cycle = 0;
+	//info->hm_start_time = ktime_set(0,0);
 	info->hm_start_time_save = false;
 #ifdef GPIO_IR_MULTI_TIMER_PRECALL
-	info->bir_init_comp = false;
-	info->btimer_total_run = false;
+	info->bir_init_comp = false;	
 #endif
-	info->timer_mask = 0;
 #endif
 	/*******************************************/
 	/* Parsing IR Data */
@@ -1308,13 +1180,13 @@ static ssize_t remocon_store(
 	if (IS_ERR(string))
 		return PTR_ERR(string);
 
-	for (i = 0; i < IR_DATA_SIZE+1; i++) {
+	for (i = 0; i < IR_DATA_SIZE+1; info->count = i++) {
 		if ((tok = strsep(&string, sep)) == NULL)
 			break;
 
 		//str to long returns 0 if success
 		if ((ret = kstrtol(tok, 10, &temp_num)) < 0) {
-			GIR_ERR("[GPIO_IR][%s] Error! IR Data is Wrong(%d)\n",
+			pr_err("[GPIO_IR][%s] Error! IR Data is Wrong(%d)\n",
 					__func__, i);
 			size = ret;
 			goto error;
@@ -1325,8 +1197,6 @@ static ssize_t remocon_store(
 		else
 			info->data[i-1] = temp_num;
 	}
-	if (i > 0)
-		info->count = i - 1;
 	/*******************************************/
 
 	if (info->freq > 100000)	// Max Frequency Limit(refered to action of ice40xx)
@@ -1345,29 +1215,22 @@ error:
 // data to initalize only once
 void init_gpio_ir_data(struct gpio_ir_info_t *info)
 {
+
 	info->gpio_high_delay = IR_GPIO_HIGH_DELAY;
 	info->gpio_low_delay = IR_GPIO_LOW_DELAY;
 
 	info->start_delay = GIR_DATA_START_DELAY;
 	info->end_delay = GIR_DATA_END_DELAY;
+	info->timer_delay = IR_TIMER_CALL_DELAY;
 
 	info->partial_timer_type = 1;
 
-	info->timer_delay = 100000;
-#ifdef GPIO_IR_MULTI_TIMER
-	info->blow_data_correction = false;
-	info->bhrtimer_multi_post_correct = false;
-#endif
+	info->blow_data_correction =true;
 
-#ifdef GPIO_IR_MULTI_TIMER
-	info->bhrtimer_multi_run_check = false;
-#endif
 	info->qos_delay = 1;
 
 	info->brun = false;
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
 	info->bir_policy_set = false;
-#endif
 
 	info->ir_data_type = 2;
 
@@ -1382,13 +1245,14 @@ static int gpio_ir_probe(struct platform_device *pdev)
 	int ret = 0;
 	int i = 0;
 
+	//struct device *gpio_ir_dev;
 	struct gpio_ir_info_t *info;
 
 	pr_info("[GPIO_IR] %s has been created!!!\n", __func__);
 
 	info = devm_kzalloc(&pdev->dev, sizeof(struct gpio_ir_info_t), GFP_KERNEL);
 	if (!info) {
-		GIR_ERR("Failed to allocate memory for gpio ir\n");
+		pr_err("Failed to allocate memory for gpio ir\n");
 		ret = -ENOMEM;
 		goto error;
 	}
@@ -1397,7 +1261,7 @@ static int gpio_ir_probe(struct platform_device *pdev)
 	if (IS_ERR(gpio_ir_dev)) {
 		ret = PTR_ERR(gpio_ir_dev);
 
-		GIR_ERR("Failed to create device(gpio_ir)");
+		pr_err("Failed to create device(gpio_ir)");
 		goto ERROR_AFTER_INFO_ALLOC;
 	}
 
@@ -1405,30 +1269,30 @@ static int gpio_ir_probe(struct platform_device *pdev)
 
 	ret = sysfs_create_group(&gpio_ir_dev->kobj, &gpio_ir_attr_group);
 	if (ret) {
-		GIR_ERR("Failed to create sysfs group");
+		pr_err("Failed to create sysfs group");
 
 		goto ERROR_AFTER_DEVICE_CREATE;
 	}
 
 #ifdef CONFIG_OF
-	if (!pdev->dev.of_node ||
-		(ir_gpio_parse_dt(pdev->dev.of_node, info)) < 0)
-#endif
-	{
-		info->en_gpio = GPIO_IR_LED_EN;
-		info->gpio = GPIO_IRLED_PIN;
+	if (pdev->dev.of_node) {
+		ir_gpio_parse_dt(pdev->dev.of_node, info);
 	}
+#else
+	info->en_gpio = GPIO_IR_LED_EN;
+	info->gpio = GPIO_IRLED_PIN;
+#endif
 
 	gpio_request_one(info->gpio, GPIOF_OUT_INIT_LOW, "IRLED");
 
 	init_gpio_ir_data(info);
 
-#ifdef GPIO_IR_MULTI_TIMER
 	for (i = (NR_CPUS - 1);  i >= 0; i--) {
 		info->tinfo[i].info = info;
 		hrtimer_init_gpio_ir(&info->tinfo[i].timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL, i);
 	}
 
+#ifdef GPIO_IR_MULTI_TIMER
 	hrtimer_init(&info->timer_end, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	info->timer_end.function = gpio_ir_timeout_end;
 #endif
@@ -1437,7 +1301,7 @@ static int gpio_ir_probe(struct platform_device *pdev)
 
 	info->data = devm_kzalloc(&pdev->dev, sizeof(unsigned int) * IR_DATA_SIZE, GFP_KERNEL);
 	if (!info->data) {
-		GIR_ERR("Failed to allocate data array for gpio ir\n");
+		pr_err("Failed to allocate data array for gpio ir\n");
 		ret = -ENOMEM;
 		goto ERROR_AFTER_SYSFS;
 	}
@@ -1449,25 +1313,22 @@ static int gpio_ir_probe(struct platform_device *pdev)
 					PM_QOS_CPU_DMA_LATENCY,
 					PM_QOS_DEFAULT_VALUE);
 
-	spin_lock_init(&info->lock_trun);
-	spin_lock_init(&info->lock_tcount);
-#ifdef GPIO_IR_POLICY_RELEASE_POST_RUN
+	spin_lock_init(&gir_lock);
 	INIT_WORK(&info->post_run_work, gpio_ir_post_run);
-#endif
 
 	irled_power_init(info->en_gpio);
 
 	return 0;
 
 ERROR_AFTER_SYSFS:
-	sysfs_remove_group(&gpio_ir_dev->kobj, &gpio_ir_attr_group);
+	sysfs_remove_group(&gpio_ir_dev->kobj, &gpio_ir_attr_group);	
 ERROR_AFTER_DEVICE_CREATE:
 	device_unregister(gpio_ir_dev);
 ERROR_AFTER_INFO_ALLOC:
 	devm_kfree(&pdev->dev, info->data);
 error:
 	if (ret) {
-		GIR_ERR(" (err = %d)!\n", ret);
+		pr_err(" (err = %d)!\n", ret);
 	}
 
 	return ret;
