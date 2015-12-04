@@ -49,6 +49,7 @@
 #include <linux/wakelock.h>
 #endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined (CONFIG_HAS_WAKELOCK) */
 
+#include <dhd_buzzz.h>
 
 /* The kernel threading is sdio-specific */
 struct task_struct;
@@ -177,7 +178,8 @@ enum dhd_prealloc_index {
 enum dhd_dongledump_mode {
 	DUMP_DISABLED = 0,
 	DUMP_MEMONLY,
-	DUMP_MEMFILE
+	DUMP_MEMFILE,
+	DUMP_TRACE
 };
 
 /* Packet alignment for most efficient SDIO (can change based on platform) */
@@ -442,6 +444,7 @@ typedef struct dhd_pub {
 	char vars_ccode[WLC_CNTRY_BUF_SZ];
 	uint vars_regrev;
 #endif /* KEEP_JP_REGREV */
+	uint32 pktidassert;
 } dhd_pub_t;
 #if defined(CUSTOMER_HW4)
 #define MAX_RESCHED_CNT 600

@@ -108,6 +108,8 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
+#if !defined(CONFIG_SEC_KCCAT6_PROJECT)
+
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	if(dsi_panel_pm_ctrl)
 #endif
@@ -119,6 +121,7 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 				__func__);
 		}
 	}
+#endif
 
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	if (dsi_panel_pm_ctrl && gpio_is_valid(ctrl_pdata->disp_en_gpio)){
@@ -131,7 +134,23 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 			pr_info("%s: disp_en_gpio set low	\n", __func__);
 	}
 #endif
+#if defined(CONFIG_SEC_KCCAT6_PROJECT)
 
+	usleep_range(1000,1000);
+	
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	if(dsi_panel_pm_ctrl)
+#endif
+	{
+		ret = regulator_disable(
+			(ctrl_pdata->shared_pdata).vdd_vreg);
+		if (ret) {
+			pr_err("%s: Failed to disable regulator.\n",
+				__func__);
+		}
+	}
+
+#endif
 	usleep_range(4000, 4000);
 
 /*
@@ -214,19 +233,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	}
 	i--;
 	usleep_range(4000, 4000);
-
-
-#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
-	if (dsi_panel_pm_ctrl && gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
-		pr_info("%s : Set High LCD Enable disp_en GPIO \n", __func__);
-		gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
-	}
-#else
-	if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
-		pr_info("%s : Set High LCD Enable disp_en GPIO \n", __func__);
-		gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
-	}
-#endif
+#if defined(CONFIG_SEC_KCCAT6_PROJECT)
 
 #if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
 	if(dsi_panel_pm_ctrl)
@@ -240,6 +247,36 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 			return ret;
 		}
 	}
+	
+	usleep_range(1000,1000);
+#endif
+
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	if (dsi_panel_pm_ctrl && gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
+		pr_info("%s : Set High LCD Enable disp_en GPIO \n", __func__);
+		gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
+	}
+#else
+	if (gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
+		pr_info("%s : Set High LCD Enable disp_en GPIO \n", __func__);
+		gpio_set_value((ctrl_pdata->disp_en_gpio), 1);
+	}
+#endif
+
+#if !defined(CONFIG_SEC_KCCAT6_PROJECT)
+#if defined(CONFIG_FB_MSM_MDSS_SAMSUNG)
+	if(dsi_panel_pm_ctrl)
+#endif
+	{
+		ret = regulator_enable( /*VDD */
+			(ctrl_pdata->shared_pdata).vdd_vreg);
+		if (ret) {
+			pr_err("%s: Failed to enable vdd regulator.\n",
+				__func__);
+			return ret;
+		}
+	}
+#endif
 	usleep_range(4000, 4000);
 
 #if 0
