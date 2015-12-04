@@ -157,6 +157,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int minfree = 0;
 	int selected_tasksize = 0;
 	short selected_oom_score_adj;
+#ifdef CONFIG_SAMP_HOTNESS
+	int selected_hotness_adj = 0;
+#endif
 	int array_size = ARRAY_SIZE(lowmem_adj);
 	int other_free;
 	int other_file;
@@ -238,6 +241,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	for_each_process(tsk) {
 		struct task_struct *p;
 		short oom_score_adj;
+#ifdef CONFIG_SAMP_HOTNESS
+		int hotness_adj = 0;
+#endif
 
 		if (tsk->flags & PF_KTHREAD)
 			continue;
@@ -266,19 +272,36 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			continue;
 		}
 		tasksize = get_mm_rss(p->mm);
+#ifdef CONFIG_SAMP_HOTNESS
+		hotness_adj = p->signal->hotness_adj;
+#endif
 		task_unlock(p);
 		if (tasksize <= 0)
 			continue;
 		if (selected) {
+#ifdef CONFIG_SAMP_HOTNESS
+			if (min_score_adj <= lowmem_adj[4]) {
+#endif
 			if (oom_score_adj < selected_oom_score_adj)
 				continue;
 			if (oom_score_adj == selected_oom_score_adj &&
 			    tasksize <= selected_tasksize)
 				continue;
+#ifdef CONFIG_SAMP_HOTNESS
+			} else {
+				if (hotness_adj > selected_hotness_adj)
+					continue;
+				if (hotness_adj == selected_hotness_adj && tasksize <= selected_tasksize)
+					continue;
+			}
+#endif
 		}
 		selected = p;
 		selected_tasksize = tasksize;
 		selected_oom_score_adj = oom_score_adj;
+#ifdef CONFIG_SAMP_HOTNESS
+		selected_hotness_adj = hotness_adj;
+#endif
 		lowmem_print(2, "select '%s' (%d), adj %hd, size %d, to kill\n",
 			     p->comm, p->pid, oom_score_adj, tasksize);
 	}
