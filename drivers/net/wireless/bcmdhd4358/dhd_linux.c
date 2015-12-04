@@ -118,7 +118,6 @@
 #define MEMDUMP_WATCHDOG_MS	250
 #define MAX_RETRY	10
 static int file_cnt = 0;
-
 dhd_pub_t *g_dhdp = NULL;
 #endif /* DHD_DEBUG_PAGEALLOC */
 
@@ -2655,7 +2654,6 @@ done:
 	DHD_GENERAL_UNLOCK(&dhd->pub, flags);
 	DHD_PERIM_UNLOCK_TRY(DHD_FWDER_UNIT(dhd), TRUE);
 	DHD_OS_WAKE_UNLOCK(&dhd->pub);
-
 
 	/* Return ok: we always eat the packet */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 20))
@@ -9381,10 +9379,8 @@ void dhd_schedule_memdump(dhd_pub_t *dhdp, uint8 *buf, uint32 size)
 	DHD_ERROR(("%s: buf(va)=%x, buf(pa)=%x, bufsize=%d\n", __FUNCTION__,
 		(uint32)buf, (uint32)__virt_to_phys((ulong)buf), size));
 #endif /* __ARM_ARCH_7A__ */
-
 	if (dhdp->memdump_enabled == DUMP_MEMONLY) {
 		BUG_ON(1);
-
 	}
 
 	dhd_deferred_schedule_work(dhdp->info->dhd_deferred_wq, (void *)dump,
@@ -9794,7 +9790,6 @@ void dhd_page_corrupt_cb(void *addr_corrupt, size_t len)
 
 	DHD_ERROR(("%s: Got dhd_page_corrupt_cb 0x%p %d\n", __FUNCTION__, addr_corrupt, len));
 
-
 	/* Start the watchdog timer to check file system */
 	DHD_OS_WD_WAKE_LOCK(dhdp);
 	dhd_watchdog_ms = MEMDUMP_WATCHDOG_MS;
@@ -9807,13 +9802,7 @@ void dhd_page_corrupt_cb(void *addr_corrupt, size_t len)
 	dhd_bus_mem_dump(dhdp);
 }
 EXPORT_SYMBOL(dhd_page_corrupt_cb);
-
-
-	/* Start the watchdog timer to check file system */
-
-
-	/* Take the dongle side dump and then BUG_ON() */
-#endif /* DHD_PKTID_AUDIT_ENABLED */
+#endif /* DHD_DEBUG_PAGEALLOC */
 
 #if defined(CUSTOMER_HW4)
 void dhd_force_disable_singlcore_scan(dhd_pub_t *dhd)
@@ -9852,27 +9841,3 @@ void dhd_force_disable_singlcore_scan(dhd_pub_t *dhd)
 	}
 }
 #endif /* CUSTOMER_HW4 */
-
-
-
-
-
-	/*  signal: thread has started */
-
-	/* Run until signal received */
-
-			/* Once you are done with taking the logs
-			 * Call BUG_ON to crash. Note that if
-			 * buzzz_panic was called with 1 then buzzz_crash
-			 * would crash else it won't
-			 */
-
-
-
-
-
-
-
-
-
-

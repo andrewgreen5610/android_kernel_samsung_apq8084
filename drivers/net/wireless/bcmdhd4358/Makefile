@@ -51,8 +51,6 @@ ifeq ($(BUS_IFACE_PCIE),y)
 	# Debugging Pagealloc
 #	DHDCFLAGS += -DDHD_DEBUG_PAGEALLOC
 #endif
-	# Enable packet audit at host side
-	DHDCFLAGS += -DDHD_PKTID_AUDIT_ENABLED
 endif
 
 
@@ -162,7 +160,7 @@ DHDCFLAGS += -DCONFIG_CONTROL_PM
 DHDCFLAGS += -DCONFIG_HAS_WAKELOCK
 
 # Used short dwell time during initial scan
-# DHDCFLAGS += -DUSE_INITIAL_SHORT_DWELL_TIME
+DHDCFLAGS += -DUSE_INITIAL_SHORT_DWELL_TIME
 
 # Japan ccode revision will be fixed by nvram's value
 DHDCFLAGS += -DKEEP_JP_REGREV

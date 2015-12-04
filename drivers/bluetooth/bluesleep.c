@@ -144,7 +144,7 @@ struct mutex bluesleep_mutex;
 
 struct proc_dir_entry *bluetooth_dir, *sleep_dir;
 
-#if defined(CONFIG_SEC_MIF_UART_SWITCH)
+#if 0 //For debug : defined(CONFIG_SEC_MIF_UART_SWITCH)
 extern unsigned int system_rev;
 #define GPIO_UART_SEL 682 /* PMA8084 GPIO_19 */
 #define GPIO_UART_SEL_REV07 116 /*MSM GPIO 116*/
@@ -158,24 +158,9 @@ static int bluesleep_get_uart_state(void)
 {
 	int state = 0;
 
-	if (bsi->uport == NULL)
-		return -1;
-
 	state = msm_hs_get_clock_state(bsi->uport);
 	return state;
 }
-
-static int bluesleep_get_uart_clock_count(void)
-{
-	int state = 0;
-
-	if (bsi->uport == NULL)
-		return -1;
-
-	state = msm_hs_get_clock_count(bsi->uport);
-	return state;
-}
-
 
 static void bluesleep_uart_awake_work(struct work_struct *work)
 {
@@ -200,18 +185,13 @@ static void hsuart_power(int on)
 {
 	int clk_state;
 
-	if (test_bit(BT_SUSPEND, &flags)) {
-		BT_DBG("it's suspend state. waiting for resume.");
+	if (test_bit(BT_SUSPEND, &flags) && !on) {
+		BT_DBG("hsuart_power OFF- it's suspend state. so return.");
 		return;
 	}
 
 	if (!bsi->uport) {
 		BT_DBG("hsuart_power called. But uport is null");
-		return;
-	}
-
-	if (on && bluesleep_get_uart_clock_count() >= 1) {
-		BT_DBG("hsuart_power called. But HS Uart clock count is %d", bluesleep_get_uart_clock_count());
 		return;
 	}
 
@@ -299,7 +279,7 @@ static void bluesleep_tx_data_wakeup(void)
  */
 static void bluesleep_sleep_work(struct work_struct *work)
 {
-#if defined(CONFIG_SEC_MIF_UART_SWITCH)
+#if 0 //For debug : defined(CONFIG_SEC_MIF_UART_SWITCH)
 	int uart_sel = 0;
 #endif
 	if (mutex_is_locked(&bluesleep_mutex))
@@ -339,7 +319,7 @@ static void bluesleep_sleep_work(struct work_struct *work)
 				return;
 			}
 
-#if defined(CONFIG_SEC_MIF_UART_SWITCH)
+#if 0 //For debug : defined(CONFIG_SEC_MIF_UART_SWITCH)
 			if(system_rev <= 6 /*board rev 06*/) {
 				uart_sel = gpio_get_value(GPIO_UART_SEL);
 			}
@@ -959,13 +939,12 @@ static int bluesleep_resume(struct platform_device *pdev)
 						GPIO_CFG_NO_PULL, GPIO_CFG_16MA), GPIO_CFG_ENABLE);
 		}
 #endif
-
-		clear_bit(BT_SUSPEND, &flags);
 		if ((bsi->uport != NULL) &&
 			(gpio_get_value(bsi->host_wake) == bsi->irq_polarity)) {
 				BT_DBG("bluesleep resume form BT event...");
 				hsuart_power(1);
 		}
+		clear_bit(BT_SUSPEND, &flags);
 	}
 	return 0;
 }
