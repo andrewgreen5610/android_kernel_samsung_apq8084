@@ -290,8 +290,8 @@ static bool snd_ctl_remove_numid_conflict(struct snd_card *card,
 	struct snd_kcontrol *kctl;
 
 	/* Make sure that the ids assigned to the control do not wrap around */
-		if (card->last_numid >= UINT_MAX - count)
-					card->last_numid = 0;
+	if (card->last_numid >= UINT_MAX - count)
+		card->last_numid = 0;
 
 	list_for_each_entry(kctl, &card->controls, list) {
 		if (kctl->id.numid < card->last_numid + 1 + count &&
@@ -1167,6 +1167,10 @@ static int snd_ctl_elem_add(struct snd_ctl_file *file,
 	int idx, err;
 
 	if (info->count < 1)
+		return -EINVAL;
+	if (!*info->id.name)
+		return -EINVAL;
+	if (strnlen(info->id.name, sizeof(info->id.name)) >= sizeof(info->id.name))
 		return -EINVAL;
 	access = info->access == 0 ? SNDRV_CTL_ELEM_ACCESS_READWRITE :
 		(info->access & (SNDRV_CTL_ELEM_ACCESS_READWRITE|
