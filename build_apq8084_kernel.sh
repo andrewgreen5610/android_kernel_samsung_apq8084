@@ -23,9 +23,9 @@ mkdir -p bin
 ln -sf /usr/bin/python2.7 ./bin/python
 export PATH=$(pwd)/bin:$PATH
 KERNEL_DEFCONFIG=apq8084_sec_defconfig
-DEBUG_DEFCONFIG=apq8084_sec_eng_defconfig
-SELINUX_DEFCONFIG=selinux_defconfig
-SELINUX_LOG_DEFCONFIG=selinux_log_defconfig
+DEBUG_DEFCONFIG=
+SELINUX_DEFCONFIG=
+SELINUX_LOG_DEFCONFIG=
 
 #sed -i.bak "s/CONFIG_MODVERSIONS=y/CONFIG_MODVERSIONS=n/g" ${BUILD_KERNEL_DIR}/arch/arm/configs/${KERNEL_DEFCONFIG}
 
