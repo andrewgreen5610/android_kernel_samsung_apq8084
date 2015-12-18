@@ -238,7 +238,7 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 
-GRAPHITE_FLAGS	= -fgraphite -fgraphite-identity -floop-flatten -floop-parallelize-all -ftree-loop-linear -floop-interchange -floop-strip-mine -floop-block -floop-nest-optimize
+GRAPHITE_FLAGS	= -fgraphite -fgraphite-identity -floop-flatten -floop-parallelize-all -ftree-loop-linear -floop-interchange -floop-strip-mine -floop-block -floop-nest-optimize -funsafe-math-optimizations -ftree-loop-ivcanon -fweb -frename-registers -fmodulo-sched -ftree-vectorize -fgcse-after-reload
 
 HOSTCC       = ccache gcc
 HOSTCXX      = ccache g++
@@ -348,7 +348,7 @@ endif
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-KERNELFLAGS	= -Ofast -pipe -DNDEBUG -mtune=cortex-a15 -mcpu=cortex-a15 -marm -mfpu=neon-vfpv4 -fgcse-las -fpredictive-commoning
+KERNELFLAGS	= -Ofast -pipe -DNDEBUG -mtune=cortex-a15 -mcpu=cortex-a15 -marm -mfpu=neon-vfpv4 -fgcse-las -fpredictive-commoning -mvectorize-with-neon-quad
 MODFLAGS	= -DMODULE $(GRAPHITE_FLAGS) $(KERNELFLAGS)
 CFLAGS_MODULE   = $(MODFLAGS) -fno-pic
 AFLAGS_MODULE   = $(MODFLAGS)
