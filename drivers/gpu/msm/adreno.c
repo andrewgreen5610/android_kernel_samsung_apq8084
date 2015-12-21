@@ -1758,7 +1758,6 @@ static int adreno_init(struct kgsl_device *device)
 	/* Power up the device */
 	kgsl_pwrctrl_enable(device);
 
-
 	/* Identify the specific GPU */
 	adreno_identify_gpu(adreno_dev);
 
@@ -1970,7 +1969,6 @@ static int adreno_start(struct kgsl_device *device, int priority)
 		set_user_nice(current, _wake_nice);
 
 	ret = _adreno_start(adreno_dev);
-
 	if (priority)
 		set_user_nice(current, nice);
 
