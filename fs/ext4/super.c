@@ -50,6 +50,7 @@
 #include "xattr.h"
 #include "acl.h"
 #include "mballoc.h"
+#include "../mount.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/ext4.h>
@@ -3282,36 +3283,6 @@ int ext4_calculate_overhead(struct super_block *sb)
 }
 
 
-static ext4_fsblk_t ext4_calculate_resv_clusters(struct super_block *sb)
-{
-	ext4_fsblk_t resv_clusters;
-
-	/*
-	 * There's no need to reserve anything when we aren't using extents.
-	 * The space estimates are exact, there are no unwritten extents,
-	 * hole punching doesn't need new metadata... This is needed especially
-	 * to keep ext2/3 backward compatibility.
-	 */
-	if (!EXT4_HAS_INCOMPAT_FEATURE(sb, EXT4_FEATURE_INCOMPAT_EXTENTS))
-		return 0;
-	/*
-	 * By default we reserve 2% or 4096 clusters, whichever is smaller.
-	 * This should cover the situations where we can not afford to run
-	 * out of space like for example punch hole, or converting
-	 * uninitialized extents in delalloc path. In most cases such
-	 * allocation would require 1, or 2 blocks, higher numbers are
-	 * very rare.
-	 */
-	resv_clusters = ext4_blocks_count(EXT4_SB(sb)->s_es) >>
-			EXT4_SB(sb)->s_cluster_bits;
-
-	do_div(resv_clusters, 50);
-	resv_clusters = min_t(ext4_fsblk_t, resv_clusters, 4096);
-
-	return resv_clusters;
-}
-
-
 static int ext4_reserve_clusters(struct ext4_sb_info *sbi, ext4_fsblk_t count)
 {
 	ext4_fsblk_t clusters = ext4_blocks_count(sbi->s_es) >>
@@ -4055,10 +4026,10 @@ no_journal:
 
 	atomic64_set(&sbi->s_r_blocks_count, ext4_r_blocks_count(es));
 
-	err = ext4_reserve_clusters(sbi, ext4_calculate_resv_clusters(sb));
+	err = ext4_reserve_clusters(sbi, 0);
 	if (err) {
 		ext4_msg(sb, KERN_ERR, "failed to reserve %llu clusters for "
-			 "reserved pool", ext4_calculate_resv_clusters(sb));
+			 "reserved pool", 0ULL);
 		goto failed_mount4a;
 	}
 
@@ -5340,12 +5311,21 @@ void print_block_data(struct super_block *sb, sector_t blocknr
 	char row_data[17] = { 0, };
 	char row_hex[50] = { 0, };
 	char ch;
+	struct mount *mnt = NULL;
 
 	printk(KERN_ERR "As EXT4-fs error, printing data in hex\n");
-	printk(KERN_ERR " [partition info] s_id : %s, start block# : %llu\n"
+	printk(KERN_ERR " [partition info] s_id : %s, start sector# : %llu\n"
 			, sb->s_id, sb->s_bdev->bd_part->start_sect);
-	printk(KERN_ERR " dump block# : %llu, start offset(byte) :", blocknr);
-	printk(KERN_ERR " %d, length(byte) : %d\n", start, len);
+	printk(KERN_ERR " dump block# : %llu, start offset(byte) : %d\n"
+			, blocknr, start);
+	printk(KERN_ERR " length(byte) : %d, data_to_dump 0x%p\n"
+			, len, (void *)data_to_dump);
+	if (!list_empty(&sb->s_mounts)) {
+		mnt = list_first_entry(&sb->s_mounts, struct mount, mnt_instance);
+		if (mnt)
+			printk(KERN_ERR " mountpoint : %s\n"
+					, mnt->mnt_mountpoint->d_name.name);
+	}
 	printk(KERN_ERR "-------------------------------------------------\n");
 
 	for (i = 0; i < (len + 15) / 16; i++) {
