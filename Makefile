@@ -348,9 +348,9 @@ endif
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-KERNELFLAGS	= -Ofast -pipe -DNDEBUG -mtune=cortex-a15 -mcpu=cortex-a15 -marm -mfpu=neon-vfpv4 -fgcse-las -fpredictive-commoning -mvectorize-with-neon-quad
-MODFLAGS	= -DMODULE $(GRAPHITE_FLAGS) $(KERNELFLAGS)
-CFLAGS_MODULE   = $(MODFLAGS) -fno-pic
+KERNELFLAGS	= -pipe -DNDEBUG -mtune=cortex-a15 -mcpu=cortex-a15 -marm -mfpu=neon-vfpv4 -fgcse-las -fpredictive-commoning -mvectorize-with-neon-quad
+MODFLAGS	= -DMODULE $(KERNELFLAGS)
+CFLAGS_MODULE   = $(MODFLAGS) -fno-pic -Os
 AFLAGS_MODULE   = $(MODFLAGS)
 LDFLAGS_MODULE  = --strip-debug
 CFLAGS_KERNEL	= $(GRAPHITE_FLAGS)
