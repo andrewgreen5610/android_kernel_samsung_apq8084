@@ -68,10 +68,10 @@ module_param(migration_load_threshold, uint, 0644);
 static bool load_based_syncs = 1;
 module_param(load_based_syncs, bool, 0644);
 
-static bool hotplug_boost = 1;
+static bool hotplug_boost;
 module_param(hotplug_boost, bool, 0644);
 
-bool wakeup_boost;
+bool wakeup_boost = 1;
 module_param(wakeup_boost, bool, 0644);
 
 static struct delayed_work input_boost_rem;
