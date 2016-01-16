@@ -271,6 +271,11 @@ void kmem_cache_destroy(struct kmem_cache *s)
 	get_online_cpus();
 	mutex_lock(&slab_mutex);
 	s->refcount--;
+	if (!s->refcount) {
+		list_del(&s->list);
+
+		if (!__kmem_cache_shutdown(s)) {
+			mutex_unlock(&slab_mutex);
 			if (s->flags & SLAB_DESTROY_BY_RCU)
 				rcu_barrier();
 
