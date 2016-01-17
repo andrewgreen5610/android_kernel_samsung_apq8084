@@ -58,8 +58,10 @@
  */
 #if __LINUX_ARM_ARCH__ >= 5
 #define PLD(code...)	code
+#define NO_PLD(code...)
 #else
 #define PLD(code...)
+#define NO_PLD(code...) code
 #endif
 
 /*
@@ -358,6 +360,27 @@ THUMB(	orr	\reg , \reg , #PSR_T_BIT	)
 	adds	\tmp, \addr, #\size - 1
 	sbcccs	\tmp, \tmp, \limit
 	bcs	\bad
+#endif
+	.endm
+
+	.irp	c,,eq,ne,cs,cc,mi,pl,vs,vc,hi,ls,ge,lt,gt,le,hs,lo
+	.macro	ret\c, reg
+#if __LINUX_ARM_ARCH__ < 6
+	mov\c	pc, \reg
+#else
+	.ifeqs	"\reg", "lr"
+	bx\c	\reg
+	.else
+	mov\c	pc, \reg
+	.endif
+#endif
+	.endm
+	.endr
+
+	.macro	ret.w, reg
+	ret	\reg
+#ifdef CONFIG_THUMB2_KERNEL
+	nop
 #endif
 	.endm
 

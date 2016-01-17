@@ -14,7 +14,24 @@
 #include <linux/suspend.h>
 #include <linux/seq_file.h>
 #include <linux/debugfs.h>
+#include <linux/types.h>
 #include <trace/events/power.h>
+#include <linux/moduleparam.h>
+
+static bool enable_si_ws = false;
+module_param(enable_si_ws, bool, 0644);
+static bool enable_msm_hsic_ws = false;
+module_param(enable_msm_hsic_ws, bool, 0644);
+static bool enable_wlan_rx_wake_ws = false;
+module_param(enable_wlan_rx_wake_ws, bool, 0644);
+static bool enable_wlan_ctrl_wake_ws = false;
+module_param(enable_wlan_ctrl_wake_ws, bool, 0644);
+static bool enable_wlan_wake_ws = false;
+module_param(enable_wlan_wake_ws, bool, 0644);
+static bool enable_bluedroid_timer_ws = false;
+module_param(enable_bluedroid_timer_ws, bool, 0644);
+static bool enable_ssp_sensorhub_ws = false;
+module_param(enable_ssp_sensorhub_ws, bool, 0644);
 
 #include "power.h"
 
@@ -52,6 +69,8 @@ static void pm_wakeup_timer_fn(unsigned long data);
 static LIST_HEAD(wakeup_sources);
 
 static DECLARE_WAIT_QUEUE_HEAD(wakeup_count_wait_queue);
+
+static ktime_t last_read_time;
 
 /**
  * wakeup_source_prepare - Prepare a new wakeup source for initialization.
@@ -122,6 +141,15 @@ void wakeup_source_destroy(struct wakeup_source *ws)
 EXPORT_SYMBOL_GPL(wakeup_source_destroy);
 
 /**
+ * wakeup_source_destroy_cb
+ * defer processing until all rcu references have expired
+ */
+static void wakeup_source_destroy_cb(struct rcu_head *head)
+{
+	wakeup_source_destroy(container_of(head, struct wakeup_source, rcu));
+}
+
+/**
  * wakeup_source_add - Add given object to the list of wakeup sources.
  * @ws: Wakeup source object to add to the list.
  */
@@ -162,6 +190,26 @@ void wakeup_source_remove(struct wakeup_source *ws)
 EXPORT_SYMBOL_GPL(wakeup_source_remove);
 
 /**
+ * wakeup_source_remove_async - Remove given object from the wakeup sources
+ * list.
+ * @ws: Wakeup source object to remove from the list.
+ *
+ * Use only for wakeup source objects created with wakeup_source_create().
+ * Memory for ws must be freed via rcu.
+ */
+static void wakeup_source_remove_async(struct wakeup_source *ws)
+{
+	unsigned long flags;
+
+	if (WARN_ON(!ws))
+		return;
+
+	spin_lock_irqsave(&events_lock, flags);
+	list_del_rcu(&ws->entry);
+	spin_unlock_irqrestore(&events_lock, flags);
+}
+
+/**
  * wakeup_source_register - Create wakeup source and add it to the list.
  * @name: Name of the wakeup source to register.
  */
@@ -184,8 +232,8 @@ EXPORT_SYMBOL_GPL(wakeup_source_register);
 void wakeup_source_unregister(struct wakeup_source *ws)
 {
 	if (ws) {
-		wakeup_source_remove(ws);
-		wakeup_source_destroy(ws);
+		wakeup_source_remove_async(ws);
+		call_rcu(&ws->rcu, wakeup_source_destroy_cb);
 	}
 }
 EXPORT_SYMBOL_GPL(wakeup_source_unregister);
@@ -318,10 +366,16 @@ int device_init_wakeup(struct device *dev, bool enable)
 {
 	int ret = 0;
 
+	if (!dev)
+		return -EINVAL;
+
 	if (enable) {
 		device_set_wakeup_capable(dev, true);
 		ret = device_wakeup_enable(dev);
 	} else {
+		if (dev->power.can_wakeup)
+			device_wakeup_disable(dev);
+
 		device_set_wakeup_capable(dev, false);
 	}
 
@@ -341,6 +395,20 @@ int device_set_wakeup_enable(struct device *dev, bool enable)
 	return enable ? device_wakeup_enable(dev) : device_wakeup_disable(dev);
 }
 EXPORT_SYMBOL_GPL(device_set_wakeup_enable);
+
+/**
+ * wakeup_source_not_registered - validate the given wakeup source.
+ * @ws: Wakeup source to be validated.
+ */
+static bool wakeup_source_not_registered(struct wakeup_source *ws)
+{
+	/*
+	 * Use timer struct to check if the given source is initialized
+	 * by wakeup_source_add.
+	 */
+	return ws->timer.function != pm_wakeup_timer_fn ||
+		   ws->timer.data != (unsigned long)ws;
+}
 
 /*
  * The functions below use the observation that each wakeup event starts a
@@ -381,6 +449,31 @@ EXPORT_SYMBOL_GPL(device_set_wakeup_enable);
 static void wakeup_source_activate(struct wakeup_source *ws)
 {
 	unsigned int cec;
+	
+	if (!enable_si_ws && !strcmp(ws->name, "sensor_ind"))
+		return;
+
+	if (!enable_msm_hsic_ws && !strcmp(ws->name, "msm_hsic_host"))
+                return;
+
+	if (!enable_wlan_rx_wake_ws && !strcmp(ws->name, "wlan_rx_wake"))
+                return;
+
+	if (!enable_wlan_ctrl_wake_ws && !strcmp(ws->name, "wlan_ctrl_wake"))
+                return;
+
+	if (!enable_wlan_wake_ws && !strcmp(ws->name, "wlan_wake"))
+                return;
+
+	if (!enable_bluedroid_timer_ws && !strcmp(ws->name, "bluedroid_timer"))
+		return;
+
+	if (!enable_ssp_sensorhub_ws && !strcmp(ws->name, "ssp_wake_lock"))
+		return;
+
+	if (WARN(wakeup_source_not_registered(ws),
+			"unregistered wakeup source\n"))
+		return;
 
 	/*
 	 * active wakeup source should bring the system
@@ -659,6 +752,37 @@ void pm_wakeup_event(struct device *dev, unsigned int msec)
 }
 EXPORT_SYMBOL_GPL(pm_wakeup_event);
 
+void pm_get_active_wakeup_sources(char *pending_wakeup_source, size_t max)
+{
+	struct wakeup_source *ws, *last_active_ws = NULL;
+	int len = 0;
+	bool active = false;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(ws, &wakeup_sources, entry) {
+		if (ws->active && len < max) {
+			if (!active)
+				len += scnprintf(pending_wakeup_source, max,
+						"Pending Wakeup Sources: ");
+			len += scnprintf(pending_wakeup_source + len, max - len,
+				"%s ", ws->name);
+			active = true;
+		} else if (!active &&
+			   (!last_active_ws ||
+			    ktime_to_ns(ws->last_time) >
+			    ktime_to_ns(last_active_ws->last_time))) {
+			last_active_ws = ws;
+		}
+	}
+	if (!active && last_active_ws) {
+		scnprintf(pending_wakeup_source, max,
+				"Last active Wakeup Source: %s",
+				last_active_ws->name);
+	}
+	rcu_read_unlock();
+}
+EXPORT_SYMBOL_GPL(pm_get_active_wakeup_sources);
+
 static void print_active_wakeup_sources(void)
 {
 	struct wakeup_source *ws;
@@ -728,9 +852,14 @@ bool pm_wakeup_pending(void)
 bool pm_get_wakeup_count(unsigned int *count, bool block)
 {
 	unsigned int cnt, inpr;
+	unsigned long flags;
 
 	if (block) {
 		DEFINE_WAIT(wait);
+
+		spin_lock_irqsave(&events_lock, flags);
+		last_read_time = ktime_get();
+		spin_unlock_irqrestore(&events_lock, flags);
 
 		for (;;) {
 			prepare_to_wait(&wakeup_count_wait_queue, &wait,
@@ -763,6 +892,7 @@ bool pm_save_wakeup_count(unsigned int count)
 {
 	unsigned int cnt, inpr;
 	unsigned long flags;
+	struct wakeup_source *ws;
 
 	events_check_enabled = false;
 	spin_lock_irqsave(&events_lock, flags);
@@ -770,6 +900,15 @@ bool pm_save_wakeup_count(unsigned int count)
 	if (cnt == count && inpr == 0) {
 		saved_count = count;
 		events_check_enabled = true;
+	} else {
+		rcu_read_lock();
+		list_for_each_entry_rcu(ws, &wakeup_sources, entry) {
+			if (ws->active ||
+			    ktime_compare(ws->last_time, last_read_time) > 0) {
+				ws->wakeup_count++;
+			}
+		}
+		rcu_read_unlock();
 	}
 	spin_unlock_irqrestore(&events_lock, flags);
 	return events_check_enabled;

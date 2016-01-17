@@ -11,21 +11,21 @@ PRODUCT_NAME=${MODEL}${CARRIER}
 
 BUILD_WHERE=$(pwd)
 BUILD_KERNEL_DIR=$BUILD_WHERE
-BUILD_ROOT_DIR=$BUILD_KERNEL_DIR/../..
+BUILD_ROOT_DIR=$BUILD_KERNEL_DIR/..
 BUILD_KERNEL_OUT_DIR=$BUILD_ROOT_DIR/android/out/target/product/$PRODUCT_NAME/obj/KERNEL_OBJ
 PRODUCT_OUT=$BUILD_ROOT_DIR/android/out/target/product/$PRODUCT_NAME
 
-BUILD_CROSS_COMPILE=$BUILD_ROOT_DIR/android/prebuilts/gcc/linux-x86/arm/arm-eabi-4.7/bin/arm-eabi-
+BUILD_CROSS_COMPILE=/usr/local/tc/bin/arm-eabi-
 BUILD_JOB_NUMBER=`grep processor /proc/cpuinfo|wc -l`
 
 # Default Python version is 2.7
 mkdir -p bin
 ln -sf /usr/bin/python2.7 ./bin/python
 export PATH=$(pwd)/bin:$PATH
-KERNEL_DEFCONFIG=apq8084_sec_defconfig
-DEBUG_DEFCONFIG=apq8084_sec_eng_defconfig
-SELINUX_DEFCONFIG=selinux_defconfig
-SELINUX_LOG_DEFCONFIG=selinux_log_defconfig
+KERNEL_DEFCONFIG=jesse_defconfig
+DEBUG_DEFCONFIG=
+SELINUX_DEFCONFIG=
+SELINUX_LOG_DEFCONFIG=
 
 #sed -i.bak "s/CONFIG_MODVERSIONS=y/CONFIG_MODVERSIONS=n/g" ${BUILD_KERNEL_DIR}/arch/arm/configs/${KERNEL_DEFCONFIG}
 
@@ -51,7 +51,7 @@ shift $((OPTIND-1))
 VARIANT=${CARRIER}
 DTS_NAMES=apq8084-sec-
 PROJECT_NAME=${VARIANT}
-VARIANT_DEFCONFIG=apq8084_sec_${MODEL}_${CARRIER}_defconfig
+VARIANT_DEFCONFIG=apq8084_sec_${MODEL}_defconfig
 case $1 in
 		clean)
 		echo "Not support... remove kernel out directory by yourself"
@@ -133,16 +133,17 @@ FUNC_BUILD_KERNEL()
         fi
 
 	FUNC_CLEAN_DTB
-
+	mkdir $BUILD_KERNEL_DIR/output
+	rm $BUILD_KERNEL_DIR/output/zImage $KERNEL_ZIMG
 	make -C $BUILD_KERNEL_DIR O=$BUILD_KERNEL_OUT_DIR -j$BUILD_JOB_NUMBER ARCH=arm \
 			CROSS_COMPILE=$BUILD_CROSS_COMPILE \
 			$KERNEL_DEFCONFIG VARIANT_DEFCONFIG=$VARIANT_DEFCONFIG \
 			DEBUG_DEFCONFIG=$DEBUG_DEFCONFIG SELINUX_DEFCONFIG=$SELINUX_DEFCONFIG \
 			SELINUX_LOG_DEFCONFIG=$SELINUX_LOG_DEFCONFIG || exit -1
-
+	cp $BUILD_KERNEL_OUT_DIR/.config $BUILD_KERNEL_DIR/arch/arm/configs/$KERNEL_DEFCONFIG
 	make -C $BUILD_KERNEL_DIR O=$BUILD_KERNEL_OUT_DIR -j$BUILD_JOB_NUMBER ARCH=arm \
 			CROSS_COMPILE=$BUILD_CROSS_COMPILE || exit -1
-
+	cp $KERNEL_ZIMG $BUILD_KERNEL_DIR/output/zImage
 	FUNC_BUILD_DTIMAGE_TARGET
 	
 	echo ""

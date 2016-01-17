@@ -29,6 +29,7 @@ Copyright (C) 2012, Samsung Electronics. All rights reserved.
  * 02110-1301, USA.
  *
 */
+
 #include "ss_dsi_panel_common.h"
 #include "../mdss_debug.h"
 
@@ -3924,6 +3925,7 @@ void mdss_samsung_dsi_te_check(void)
 	} else
 		pr_err("disp_te_gpio is not valid\n");
 }
+
 void mdss_mdp_underrun_dump_info(void)
 {
 	struct mdss_mdp_pipe *pipe;

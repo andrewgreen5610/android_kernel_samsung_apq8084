@@ -24,7 +24,7 @@
 #include <linux/workqueue.h>
 #include <linux/clk/msm-clk.h>
 
-#include <mach/msm_bus.h>
+#include <linux/msm-bus.h>
 #include <mach/rpm-regulator.h>
 #include <mach/msm_iomap.h>
 #include <linux/debugfs.h>
@@ -675,6 +675,8 @@ static irqreturn_t mxhci_hsic_wakeup_irq(int irq, void *data)
 			mxhci->pm_usage_cnt = 1;
 	}
 	spin_unlock(&mxhci->wakeup_lock);
+
+	pm_relax(mxhci->dev);
 
 	return IRQ_HANDLED;
 }

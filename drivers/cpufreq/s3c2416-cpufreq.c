@@ -72,19 +72,19 @@ static struct s3c2416_dvfs s3c2416_dvfs_table[] = {
 #endif
 
 static struct cpufreq_frequency_table s3c2416_freq_table[] = {
-	{ SOURCE_HCLK, FREQ_DVS },
-	{ SOURCE_ARMDIV, 133333 },
-	{ SOURCE_ARMDIV, 266666 },
-	{ SOURCE_ARMDIV, 400000 },
-	{ 0, CPUFREQ_TABLE_END },
+	{ 0, SOURCE_HCLK, FREQ_DVS },
+	{ 0, SOURCE_ARMDIV, 133333 },
+	{ 0, SOURCE_ARMDIV, 266666 },
+	{ 0, SOURCE_ARMDIV, 400000 },
+	{ 0, 0, CPUFREQ_TABLE_END },
 };
 
 static struct cpufreq_frequency_table s3c2450_freq_table[] = {
-	{ SOURCE_HCLK, FREQ_DVS },
-	{ SOURCE_ARMDIV, 133500 },
-	{ SOURCE_ARMDIV, 267000 },
-	{ SOURCE_ARMDIV, 534000 },
-	{ 0, CPUFREQ_TABLE_END },
+	{ 0, SOURCE_HCLK, FREQ_DVS },
+	{ 0, SOURCE_ARMDIV, 133500 },
+	{ 0, SOURCE_ARMDIV, 267000 },
+	{ 0, SOURCE_ARMDIV, 534000 },
+	{ 0, 0, CPUFREQ_TABLE_END },
 };
 
 static int s3c2416_cpufreq_verify_speed(struct cpufreq_policy *policy)
@@ -511,9 +511,10 @@ static struct freq_attr *s3c2416_cpufreq_attr[] = {
 };
 
 static struct cpufreq_driver s3c2416_cpufreq_driver = {
+	.flags		= CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.flags          = 0,
 	.verify		= s3c2416_cpufreq_verify_speed,
-	.target		= s3c2416_cpufreq_set_target,
+	.target		= s3c2416_cpufreq_set_target,<<<
 	.get		= s3c2416_cpufreq_get_speed,
 	.init		= s3c2416_cpufreq_driver_init,
 	.name		= "s3c2416",

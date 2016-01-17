@@ -103,7 +103,6 @@ struct binder_version {
 #define	BINDER_SET_CONTEXT_MGR		_IOW('b', 7, __s32)
 #define	BINDER_THREAD_EXIT		_IOW('b', 8, __s32)
 #define BINDER_VERSION			_IOWR('b', 9, struct binder_version)
-
 /*
  * NOTE: Two special error codes you should check for when calling
  * in to the driver are:

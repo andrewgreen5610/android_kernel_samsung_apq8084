@@ -38,19 +38,19 @@ static struct s3c64xx_dvfs s3c64xx_dvfs_table[] = {
 };
 
 static struct cpufreq_frequency_table s3c64xx_freq_table[] = {
-	{ 0,  66000 },
-	{ 0, 100000 },
-	{ 0, 133000 },
-	{ 1, 200000 },
-	{ 1, 222000 },
-	{ 1, 266000 },
-	{ 2, 333000 },
-	{ 2, 400000 },
-	{ 2, 532000 },
-	{ 2, 533000 },
-	{ 3, 667000 },
-	{ 4, 800000 },
-	{ 0, CPUFREQ_TABLE_END },
+	{ 0, 0,  66000 },
+	{ 0, 0, 100000 },
+	{ 0, 0, 133000 },
+	{ 0, 1, 200000 },
+	{ 0, 1, 222000 },
+	{ 0, 1, 266000 },
+	{ 0, 2, 333000 },
+	{ 0, 2, 400000 },
+	{ 0, 2, 532000 },
+	{ 0, 2, 533000 },
+	{ 0, 3, 667000 },
+	{ 0, 4, 800000 },
+	{ 0, 0, CPUFREQ_TABLE_END },
 };
 #endif
 
@@ -259,7 +259,7 @@ static int s3c64xx_cpufreq_driver_init(struct cpufreq_policy *policy)
 }
 
 static struct cpufreq_driver s3c64xx_cpufreq_driver = {
-	.flags          = 0,
+	.flags		= CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.verify		= s3c64xx_cpufreq_verify_speed,
 	.target		= s3c64xx_cpufreq_set_target,
 	.get		= s3c64xx_cpufreq_get_speed,
