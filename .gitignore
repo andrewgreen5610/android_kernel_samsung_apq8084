@@ -93,3 +93,5 @@ signing_key.x509
 x509.genkey
 
 output/
+bin/
+build.log
