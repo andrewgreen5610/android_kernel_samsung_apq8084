@@ -340,11 +340,6 @@ INSTALLKERNEL  := installkernel
 DEPMOD		= /sbin/depmod
 PERL		= perl
 CHECK		= sparse
-ifeq ($(CONFIG_CRYPTO_FIPS),)
-READELF	= $(CROSS_COMPILE)readelf
-export READELF
-cmd_fips_gen_hmac = $(CONFIG_SHELL) $(srctree)/scripts/fips_crypto_hmac.sh $(objtree)/vmlinux $(objtree)/System.map
-endif
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
@@ -790,9 +785,6 @@ quiet_cmd_link-vmlinux = LINK    $@
 # Include targets which we want to
 # execute if the rest of the kernel build went well.
 vmlinux: scripts/link-vmlinux.sh $(vmlinux-deps) FORCE
-#$(if $(CONFIG_CRYPTO_FIPS),						
-#	@$(kecho) '  FIPS : Generating hmac of crypto and updating vmlinux... ';	
-#	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/fips_crypto_hmac.sh $(objtree)/vmlinux $(objtree)/System.map)
 ifdef CONFIG_HEADERS_CHECK
 	$(Q)$(MAKE) -f $(srctree)/Makefile headers_check
 endif
@@ -803,10 +795,6 @@ ifdef CONFIG_BUILD_DOCSRC
 	$(Q)$(MAKE) $(build)=Documentation
 endif
 	+$(call if_changed,link-vmlinux)
-ifdef CONFIG_CRYPTO_FIPS
-	@$(kecho) '  FIPS : Generating hmac of crypto and updating vmlinux... ';
-	$(call cmd,fips_gen_hmac)
-endif
 
 # The actual objects are generated when descending, 
 # make sure no implicit rule kicks in
