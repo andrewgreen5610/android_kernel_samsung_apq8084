@@ -308,15 +308,15 @@ static struct ctl_table kern_table[] = {
 	},
 #ifdef CONFIG_SCHED_FREQ_INPUT
 	{
-		.procname	= "sched_freq_inc_notify_slack_pct",
-		.data		= &sysctl_sched_freq_inc_notify_slack_pct,
+		.procname	= "sched_freq_inc_notify",
+		.data		= &sysctl_sched_freq_inc_notify,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
 	},
 	{
-		.procname	= "sched_freq_dec_notify_slack_pct",
-		.data		= &sysctl_sched_freq_dec_notify_slack_pct,
+		.procname	= "sched_freq_dec_notify",
+		.data		= &sysctl_sched_freq_dec_notify,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec,
@@ -341,13 +341,6 @@ static struct ctl_table kern_table[] = {
 		.maxlen         = sizeof(unsigned int),
 		.mode           = 0644,
 		.proc_handler   = sched_hmp_proc_update_handler,
-	},
-	{
-		.procname	= "sched_gov_response_time",
-		.data		= &sysctl_sched_gov_response_time,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec,
 	},
 #endif
 #ifdef CONFIG_SCHED_HMP
