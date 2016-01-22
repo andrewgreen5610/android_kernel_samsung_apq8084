@@ -51,6 +51,8 @@ ENTRY(cpu_arm9tdmi_reset)
 ENDPROC(cpu_arm9tdmi_reset)
 		.popsection
 
+		__CPUINIT
+
 		.type	__arm9tdmi_setup, #function
 __arm9tdmi_setup:
 		ret	lr

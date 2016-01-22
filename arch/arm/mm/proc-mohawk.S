@@ -383,6 +383,8 @@ ENTRY(cpu_mohawk_do_resume)
 ENDPROC(cpu_mohawk_do_resume)
 #endif
 
+	__CPUINIT
+
 	.type	__mohawk_setup, #function
 __mohawk_setup:
 	mov	r0, #0

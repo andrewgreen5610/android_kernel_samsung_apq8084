@@ -16,6 +16,7 @@
 #include <linux/init.h>
 #include <asm/assembler.h>
 
+	__CPUINIT
 #define CPU_RESUME_ADDR_REG 0xf10182d4
 
 .global armada_375_smp_cpu1_enable_code_start

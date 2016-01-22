@@ -273,6 +273,8 @@ ENDPROC(arm940_dma_unmap_area)
 	@ define struct cpu_cache_fns (see <asm/cacheflush.h> and proc-macros.S)
 	define_cache_functions arm940
 
+	__CPUINIT
+
 	.type	__arm940_setup, #function
 __arm940_setup:
 	mov	r0, #0

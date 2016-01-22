@@ -425,6 +425,8 @@ ENTRY(cpu_arm926_do_resume)
 ENDPROC(cpu_arm926_do_resume)
 #endif
 
+	__CPUINIT
+
 	.type	__arm926_setup, #function
 __arm926_setup:
 	mov	r0, #0

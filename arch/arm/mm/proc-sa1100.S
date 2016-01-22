@@ -198,6 +198,8 @@ ENTRY(cpu_sa1100_do_resume)
 ENDPROC(cpu_sa1100_do_resume)
 #endif
 
+	__CPUINIT
+
 	.type	__sa1100_setup, #function
 __sa1100_setup:
 	mov	r0, #0

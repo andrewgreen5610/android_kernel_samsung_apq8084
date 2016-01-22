@@ -9,6 +9,8 @@
 #include <linux/linkage.h>
 #include <linux/init.h>
 
+	__CPUINIT
+
 ENTRY(zynq_secondary_trampoline)
 	ldr	r0, [pc]
 	bx	r0
