@@ -141,10 +141,8 @@ int adreno_drawctxt_wait(struct adreno_device *adreno_dev,
 		else
 			ret = (int) ret_temp;
 	} else {
-		__wait_event_interruptible(drawctxt->waiting,
-			_check_context_timestamp(device, drawctxt, timestamp),
-				ret_temp);
-		ret = (int)ret_temp;
+		ret = wait_event_interruptible(drawctxt->waiting,
+			_check_context_timestamp(device, drawctxt, timestamp));
 	}
 
 	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
