@@ -30,8 +30,10 @@ static bool enable_wlan_wake_ws = false;
 module_param(enable_wlan_wake_ws, bool, 0644);
 static bool enable_bluedroid_timer_ws = false;
 module_param(enable_bluedroid_timer_ws, bool, 0644);
-static bool enable_ssp_sensorhub_ws = false;
+static bool enable_ssp_sensorhub_ws = true;
 module_param(enable_ssp_sensorhub_ws, bool, 0644);
+static bool enable_ssp_ws = true;
+module_param(enable_ssp_ws, bool, 0644);
 
 #include "power.h"
 
@@ -468,7 +470,10 @@ static void wakeup_source_activate(struct wakeup_source *ws)
 	if (!enable_bluedroid_timer_ws && !strcmp(ws->name, "bluedroid_timer"))
 		return;
 
-	if (!enable_ssp_sensorhub_ws && !strcmp(ws->name, "ssp_wake_lock"))
+	if (!enable_ssp_sensorhub_ws && !strcmp(ws->name, "ssp_sensorhub_wake_lock"))
+		return;
+
+	if (!enable_ssp_ws && !strcmp(ws->name, "ssp_wake_lock"))
 		return;
 
 	if (WARN(wakeup_source_not_registered(ws),

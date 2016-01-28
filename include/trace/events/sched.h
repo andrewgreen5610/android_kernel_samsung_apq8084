@@ -116,9 +116,10 @@ TRACE_EVENT(sched_enq_deq_task,
 
 TRACE_EVENT(sched_task_load,
 
-	TP_PROTO(struct task_struct *p, int small_task, int boost, int reason),
+	TP_PROTO(struct task_struct *p, int small_task, int boost, int reason,
+		 int sync),
 
-	TP_ARGS(p, small_task, boost, reason),
+	TP_ARGS(p, small_task, boost, reason, sync),
 
 	TP_STRUCT__entry(
 		__array(	char,	comm,	TASK_COMM_LEN	)
@@ -130,6 +131,7 @@ TRACE_EVENT(sched_task_load,
 		__field(	int,	small_task		)
 		__field(	int,	boost			)
 		__field(	int,	reason			)
+		__field(	int,	sync			)
 	),
 
 	TP_fast_assign(
@@ -142,12 +144,14 @@ TRACE_EVENT(sched_task_load,
 		__entry->small_task	= small_task;
 		__entry->boost		= boost;
 		__entry->reason		= reason;
+		__entry->sync		= sync;
 	),
 
-	TP_printk("%d (%s): sum=%u, sum_scaled=%u, period=%u demand=%u small=%d boost=%d reason=%d",
+	TP_printk("%d (%s): sum=%u, sum_scaled=%u, period=%u demand=%u small=%d boost=%d reason=%d sync=%d",
 		__entry->pid, __entry->comm, __entry->sum,
 		__entry->sum_scaled, __entry->period, __entry->demand,
-		__entry->small_task, __entry->boost, __entry->reason)
+		__entry->small_task, __entry->boost, __entry->reason,
+		__entry->sync)
 );
 
 TRACE_EVENT(sched_cpu_load,
@@ -170,6 +174,7 @@ TRACE_EVENT(sched_cpu_load,
 		__field(unsigned int, cur_freq			)
 		__field(unsigned int, max_freq			)
 		__field(unsigned int, power_cost		)
+		__field(	 int, cstate			)
 	),
 
 	TP_fast_assign(
@@ -185,14 +190,15 @@ TRACE_EVENT(sched_cpu_load,
 		__entry->cur_freq		= rq->cur_freq;
 		__entry->max_freq		= rq->max_freq;
 		__entry->power_cost		= power_cost;
+		__entry->cstate			= rq->cstate;
 	),
 
-	TP_printk("cpu %u idle %d mostly_idle %d nr_run %u nr_big %u nr_small %u lsf %u capacity %u cr_avg %llu fcur %u fmax %u power_cost %u",
+	TP_printk("cpu %u idle %d mostly_idle %d nr_run %u nr_big %u nr_small %u lsf %u capacity %u cr_avg %llu fcur %u fmax %u power_cost %u cstate %d",
 	__entry->cpu, __entry->idle, __entry->mostly_idle, __entry->nr_running,
 	__entry->nr_big_tasks, __entry->nr_small_tasks,
 	__entry->load_scale_factor, __entry->capacity,
 	__entry->cumulative_runnable_avg, __entry->cur_freq, __entry->max_freq,
-	__entry->power_cost)
+	__entry->power_cost, __entry->cstate)
 );
 
 TRACE_EVENT(sched_set_boost,
@@ -407,24 +413,24 @@ TRACE_EVENT(sched_get_busy,
 
 TRACE_EVENT(sched_freq_alert,
 
-	TP_PROTO(int cpu, unsigned int cur_freq, unsigned int freq_required),
+	TP_PROTO(int cpu, u64 old_load, u64 new_load),
 
-	TP_ARGS(cpu, cur_freq, freq_required),
+	TP_ARGS(cpu, old_load, new_load),
 
 	TP_STRUCT__entry(
 		__field(	int,	cpu			)
-		__field(unsigned int,	cur_freq		)
-		__field(unsigned int,	freq_required		)
+		__field(	u64,	old_load		)
+		__field(	u64,	new_load		)
 	),
 
 	TP_fast_assign(
 		__entry->cpu		= cpu;
-		__entry->cur_freq	= cur_freq;
-		__entry->freq_required	= freq_required;
+		__entry->old_load	= old_load;
+		__entry->new_load	= new_load;
 	),
 
-	TP_printk("cpu %d cur_freq=%u freq_required=%u",
-		__entry->cpu, __entry->cur_freq, __entry->freq_required)
+	TP_printk("cpu %d old_load=%llu new_load=%llu",
+		__entry->cpu, __entry->old_load, __entry->new_load)
 );
 
 #endif	/* CONFIG_SCHED_FREQ_INPUT */

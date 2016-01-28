@@ -33,7 +33,7 @@
 #include <linux/of.h>
 #include <soc/qcom/cpufreq.h>
 #include <trace/events/power.h>
-#include <mach/msm_bus.h>
+#include <linux/msm-bus.h>
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -48,9 +48,6 @@ static struct clk *l2_clk;
 static unsigned int freq_index[NR_CPUS];
 static unsigned int max_freq_index;
 static struct cpufreq_frequency_table *freq_table;
-#ifdef CONFIG_MSM_CPU_VOLTAGE_CONTROL
-static struct cpufreq_frequency_table *krait_freq_table;
-#endif
 static unsigned int *l2_khz;
 static bool is_sync;
 static unsigned long *mem_bw;
@@ -416,13 +413,17 @@ static int msm_cpufreq_suspend(void)
 
 static int msm_cpufreq_resume(void)
 {
-	int cpu, ret;
+	int cpu;
+#ifndef CONFIG_CPU_BOOST
+	int ret;
 	struct cpufreq_policy policy;
+#endif
 
 	for_each_possible_cpu(cpu) {
 		per_cpu(cpufreq_suspend, cpu).device_suspended = 0;
 	}
 
+#ifndef CONFIG_CPU_BOOST
 	/*
 	 * Freq request might be rejected during suspend, resulting
 	 * in policy->cur violating min/max constraint.
@@ -444,6 +445,7 @@ static int msm_cpufreq_resume(void)
 				cpu);
 	}
 	put_online_cpus();
+#endif
 
 	return NOTIFY_DONE;
 }
@@ -474,7 +476,7 @@ static struct freq_attr *msm_freq_attr[] = {
 
 static struct cpufreq_driver msm_cpufreq_driver = {
 	/* lps calculations are handled here. */
-	.flags		= CPUFREQ_STICKY | CPUFREQ_CONST_LOOPS,
+	.flags		= CPUFREQ_STICKY | CPUFREQ_CONST_LOOPS | CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.init		= msm_cpufreq_init,
 	.verify		= msm_cpufreq_verify,
 	.target		= msm_cpufreq_target,
@@ -618,20 +620,6 @@ static int cpufreq_parse_dt(struct device *dev)
 	freq_table[i].driver_data = i;
 	freq_table[i].frequency = CPUFREQ_TABLE_END;
 
-#ifdef CONFIG_MSM_CPU_VOLTAGE_CONTROL
-	/* Create frequence table with unrounded values */
-	krait_freq_table = devm_kzalloc(dev, (nf + 1) * sizeof(*krait_freq_table),
-					GFP_KERNEL);
-	if (!krait_freq_table)
-		return -ENOMEM;
-
-	*krait_freq_table = *freq_table;
-
-	for (i = 0, j = 0; i < nf; i++, j += 3)
-		krait_freq_table[i].frequency = data[j];
-	krait_freq_table[i].frequency = CPUFREQ_TABLE_END;
-#endif
-
 	if (ports)
 		devm_kfree(dev, ports);
 
@@ -674,26 +662,6 @@ const struct file_operations msm_cpufreq_fops = {
 	.llseek		= seq_lseek,
 	.release	= seq_release,
 };
-#endif
-
-#ifdef CONFIG_MSM_CPU_VOLTAGE_CONTROL
-int use_for_scaling(unsigned int freq)
-{
-	unsigned int i, cpu_freq;
-
-	if (!krait_freq_table)
-		return -EINVAL;
-
-	for (i = 0; krait_freq_table[i].frequency != CPUFREQ_TABLE_END; i++) {
-		cpu_freq = krait_freq_table[i].frequency;
-		if (cpu_freq == CPUFREQ_ENTRY_INVALID)
-			continue;
-		if (freq == cpu_freq)
-			return freq;
-	}
-
-	return -EINVAL;
-}
 #endif
 
 static int __init msm_cpufreq_probe(struct platform_device *pdev)
