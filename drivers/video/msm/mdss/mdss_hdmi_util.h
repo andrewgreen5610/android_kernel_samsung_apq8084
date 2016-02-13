@@ -78,6 +78,7 @@
 #define HDMI_RAMP_CTRL2                  (0x00000100)
 #define HDMI_RAMP_CTRL3                  (0x00000104)
 #define HDMI_CS_60958_2                  (0x00000108)
+#define HDMI_HDCP_CTRL2                  (0x0000010C)
 #define HDMI_HDCP_CTRL                   (0x00000110)
 #define HDMI_HDCP_DEBUG_CTRL             (0x00000114)
 #define HDMI_HDCP_INT_CTRL               (0x00000118)
@@ -228,6 +229,9 @@
 #define FRAME_PACKING		0x20
 #define SIDE_BY_SIDE_HALF	0x40
 
+#define LPASS_LPAIF_RDDMA_CTL0           (0xFE152000)
+#define LPASS_LPAIF_RDDMA_PER_CNT0       (0x00000014)
+
 enum hdmi_tx_feature_type {
 	HDMI_TX_FEAT_EDID,
 	HDMI_TX_FEAT_HDCP,
@@ -268,4 +272,7 @@ int hdmi_ddc_write(struct hdmi_tx_ddc_ctrl *, struct hdmi_tx_ddc_data *);
 int hdmi_ddc_read_seg(struct hdmi_tx_ddc_ctrl *, struct hdmi_tx_ddc_data *);
 int hdmi_ddc_read(struct hdmi_tx_ddc_ctrl *, struct hdmi_tx_ddc_data *);
 
+#if defined(CONFIG_SEC_MHL_SUPPORT)
+bool is_mhl_supported_resolution(uint8_t mhl_version, int mhl_video_linkmode, u32 mode);
+#endif
 #endif /* __HDMI_UTIL_H__ */

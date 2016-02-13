@@ -21,6 +21,7 @@
 #include <linux/err.h>
 #include <linux/dma-mapping.h>
 #include <linux/msm_ion.h>
+#include <linux/highmem.h>
 
 #include <asm/cacheflush.h>
 
@@ -98,6 +99,12 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 	/* keep this for memory release */
 	buffer->priv_virt = info;
 	dev_dbg(dev, "Allocate buffer %p\n", buffer);
+
+	if (heap->id == 27) {
+		// printk("[ION_alloc id==27|QSEECOM] 0x%p/0x%x => kmap_flush_unused\n", (void*)info->handle, (unsigned int)len);
+		kmap_flush_unused();
+	}
+
 	return 0;
 
 err:

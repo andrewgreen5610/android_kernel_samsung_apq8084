@@ -339,6 +339,11 @@ INSTALLKERNEL  := installkernel
 DEPMOD		= /sbin/depmod
 PERL		= perl
 CHECK		= sparse
+ifeq ($(CONFIG_CRYPTO_FIPS),)
+READELF	= $(CROSS_COMPILE)readelf
+export READELF
+cmd_fips_gen_hmac = $(CONFIG_SHELL) $(srctree)/scripts/fips_crypto_hmac.sh $(objtree)/vmlinux $(objtree)/System.map
+endif
 
 # Use the wrapper for the compiler.  This wrapper scans for new
 # warnings and causes the build to stop upon encountering them.
@@ -348,7 +353,7 @@ CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
 CFLAGS_MODULE   =
 AFLAGS_MODULE   =
-LDFLAGS_MODULE  =
+LDFLAGS_MODULE  = --strip-debug
 CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
@@ -377,7 +382,15 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks
+		   -fno-delete-null-pointer-checks \
+		   -Wno-sequence-point \
+		   -Wno-switch-bool \
+		   -Wno-misleading-indentation \
+		   -Wno-unused-const-variable \
+		   -Wno-unused-function \
+		   -Wno-logical-not-parentheses \
+		   -Wno-bool-compare \
+		   -std=gnu90
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
@@ -773,6 +786,9 @@ quiet_cmd_link-vmlinux = LINK    $@
 # Include targets which we want to
 # execute if the rest of the kernel build went well.
 vmlinux: scripts/link-vmlinux.sh $(vmlinux-deps) FORCE
+#$(if $(CONFIG_CRYPTO_FIPS),						
+#	@$(kecho) '  FIPS : Generating hmac of crypto and updating vmlinux... ';	
+#	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/fips_crypto_hmac.sh $(objtree)/vmlinux $(objtree)/System.map)
 ifdef CONFIG_HEADERS_CHECK
 	$(Q)$(MAKE) -f $(srctree)/Makefile headers_check
 endif
@@ -783,6 +799,10 @@ ifdef CONFIG_BUILD_DOCSRC
 	$(Q)$(MAKE) $(build)=Documentation
 endif
 	+$(call if_changed,link-vmlinux)
+ifdef CONFIG_CRYPTO_FIPS
+	@$(kecho) '  FIPS : Generating hmac of crypto and updating vmlinux... ';
+	$(call cmd,fips_gen_hmac)
+endif
 
 # The actual objects are generated when descending, 
 # make sure no implicit rule kicks in
