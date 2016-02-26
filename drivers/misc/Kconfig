@@ -4,6 +4,15 @@
 
 menu "Misc devices"
 
+config SEC_FPGA_ICE40XX
+        tristate "this feature allows FPGA_ICE40XX"
+        default y
+        help
+          This is a driver for IR LEd driver based on Lattice chip.
+          Lattice FPGA can support IR LED.
+          To compile this driver as a module, choose M here.
+          If unsure, say N.
+
 config SENSORS_LIS3LV02D
 	tristate
 	depends on INPUT
@@ -374,6 +383,17 @@ config SENSORS_APDS990X
 	   To compile this driver as a module, choose M here: the
 	   module will be called apds990x. If unsure, say N here.
 
+config SAMSUNG_JACK
+	bool "3.5 PI Jack driver for Samsung devices"
+	depends on INPUT
+	default n
+	help
+	 This is 3.5 PI JACK driver for Samsung devies.
+	 sec_jack from samsung driver used for samsung devices.
+
+	 To samsung jack is reviewed and supported in all the
+	 samsung devices.
+
 config HMC6352
 	tristate "Honeywell HMC6352 compass"
 	depends on I2C
@@ -581,6 +601,17 @@ config QPNP_MISC
 	  and the driver provides an API to check if this interrupt
 	  is available on the current PMIC chip.
 
+config SAMSUNG_JACK
+	bool "3.5 PI Jack driver for Samsung devices"
+	depends on INPUT
+	default n
+	help
+	 This is 3.5 PI JACK driver for Samsung devies.
+	 sec_jack from samsung driver used for samsung devices.
+
+	 To samsung jack is reviewed and supported in all the
+	 samsung devices.
+
 config USB_HSIC_SMSC_HUB
 	tristate "Support for HSIC based MSM on-chip SMSC3503 HUB"
 	depends on USB_EHCI_MSM_HSIC
@@ -608,6 +639,45 @@ config APQ8084_DOCKING_STATION
 	help
 	  This option enables support for the USB and Ethernet ports found on
 	  the QTI APQ8084 Docking Station.
+
+config NFC_PN547
+	bool "NXP PN547 NFC Controller Driver"
+	depends on I2C
+	default n
+	help
+	  NXP PN547 Near Field Communication controller support.
+	  This option enables device driver support for the NFC.
+	  It is used by many services. NFC is fully controlled using I2C
+	  to communicate the AP chip.
+
+config NFC_PN547_PMC8974_CLK_REQ
+	bool "NXP PN547 NFC Controller Driver"
+	depends on I2C
+	default n
+	help
+	  PM8941 Clock request for NXP PN547 Near Field
+	  Communication controller support.
+	  This option enables d1 clock for NFC.
+
+config NFC_PN547_8226_USE_BBCLK2
+	bool "NXP PN547 NFC CLOCK Controller"
+	depends on NFC_PN547
+	default n
+	help
+	  NXP PN547 Near Field Communication controller support.
+	  This option enables device driver support for the NFC.
+	  It is used by many services. NFC is fully controlled using I2C
+	  to communicate the AP chip.
+
+config NFC_PN547_8084_USE_BBCLK2
+	bool "NXP PN547 NFC CLOCK Controller"
+	depends on NFC_PN547
+	default n
+	help
+	  NXP PN547 Near Field Communication controller support.
+	  This option enables device driver support for the NFC.
+	  It is used by many services. NFC is fully controlled using I2C
+	  to communicate the AP chip.
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"

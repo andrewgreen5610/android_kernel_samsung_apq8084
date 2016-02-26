@@ -85,7 +85,7 @@ static struct notifier_block panic_blk = {
 	.notifier_call	= panic_prep_restart,
 };
 
-static void set_dload_mode(int on)
+void set_dload_mode(int on)
 {
 	if (dload_mode_addr) {
 		__raw_writel(on ? 0xE47B337D : 0, dload_mode_addr);
@@ -95,6 +95,8 @@ static void set_dload_mode(int on)
 		dload_mode_enabled = on;
 	}
 }
+
+EXPORT_SYMBOL(set_dload_mode);
 
 static bool get_dload_mode(void)
 {
@@ -182,7 +184,7 @@ static void __msm_power_off(int lower_pshold)
 	set_dload_mode(0);
 #endif
 	pm8xxx_reset_pwr_off(0);
-	qpnp_pon_system_pwr_off(PON_POWER_OFF_SHUTDOWN);
+	qpnp_pon_system_pwr_off(PON_POWER_OFF_SHUTDOWN+1);
 
 	if (lower_pshold) {
 		halt_spmi_pmic_arbiter();
@@ -200,8 +202,12 @@ static void msm_power_off(void)
 	__msm_power_off(1);
 }
 
+#ifdef CONFIG_SAMSUNG_LPM_MODE
+extern int poweroff_charging;
+#endif
 static void msm_restart_prepare(const char *cmd)
 {
+	unsigned long value;
 #ifdef CONFIG_MSM_DLOAD_MODE
 
 	/* This looks like a normal reboot at this point. */
@@ -221,11 +227,37 @@ static void msm_restart_prepare(const char *cmd)
 
 	pm8xxx_reset_pwr_off(1);
 
+#if 0 /* FIXME */
 	/* Hard reset the PMIC unless memory contents must be maintained. */
 	if (get_dload_mode() || (cmd != NULL && cmd[0] != '\0'))
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
 	else
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
+#else
+		get_dload_mode(); // Only for suppressing a warning message
+#ifdef CONFIG_SAMSUNG_LPM_MODE
+	if (poweroff_charging) {
+		if (in_panic) {
+			qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+		} else {
+#ifdef CONFIG_MAINTENANCE_MODE
+/* When user push pwd key to turn on Device.
+ * Because of Hard reset device turn to Maintenance mode.
+*/
+			qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+#else
+			qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET+1);
+#endif
+		}
+		pr_err("%s : LPM Charging Mode!!, [%d]\n", __func__, in_panic);
+	} else {
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+		pr_err("%s : Normal mode Mode!!\n", __func__);
+	}
+#else
+	qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+#endif /* CONFIG_SAMSUNG_LPM_MODE */
+#endif /* FIXME */
 
 	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
@@ -238,8 +270,27 @@ static void msm_restart_prepare(const char *cmd)
 			unsigned long code;
 			code = simple_strtoul(cmd + 4, NULL, 16) & 0xff;
 			__raw_writel(0x6f656d00 | code, restart_reason);
+		} else if (!strncmp(cmd, "download", 8)) {
+		    __raw_writel(0x12345671, restart_reason);
+		} else if (!strncmp(cmd, "sud", 3)) {
+			__raw_writel(0xabcf0000 | (cmd[3] - '0'),
+					restart_reason);
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
+		} else if (!strncmp(cmd, "debug", 5)
+				&& !kstrtoul(cmd + 5, 0, &value)) {
+			__raw_writel(0xabcd0000 | value, restart_reason);
+#if defined(CONFIG_SWITCH_DUAL_MODEM) || defined(CONFIG_MUIC_SUPPORT_RUSTPROOF)
+		} else if (!strncmp(cmd, "swsel", 5) /* set switch value */
+				&& !kstrtoul(cmd + 5, 0, &value)) {
+			__raw_writel(0xabce0000 | value, restart_reason);
+#endif
+		} else if (strlen(cmd) == 0 ) {
+			pr_notice("%s : value of cmd is NULL.\n",__func__);
+			__raw_writel(0x12345678, restart_reason);
+		} else if (strlen(cmd) == 0) {
+		    printk(KERN_NOTICE "%s : value of cmd is NULL.\n", __func__);
+		    __raw_writel(0x12345678, restart_reason);
 		} else {
 			__raw_writel(0x77665501, restart_reason);
 		}

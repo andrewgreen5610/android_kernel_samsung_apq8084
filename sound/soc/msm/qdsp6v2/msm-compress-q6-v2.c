@@ -127,6 +127,7 @@ struct msm_compr_audio {
 	uint32_t cmd_ack;
 	uint32_t cmd_interrupt;
 	uint32_t drain_ready;
+	uint32_t eos_ack;
 	uint32_t stream_available;
 	uint32_t next_stream;
 
@@ -360,7 +361,7 @@ static void compr_event_handler(uint32_t opcode,
 		if (atomic_read(&prtd->eos) &&
 		    !prtd->gapless_state.set_next_stream_id) {
 			pr_debug("ASM_DATA_CMDRSP_EOS wake up\n");
-			prtd->cmd_ack = 1;
+			prtd->eos_ack = 1;
 			wake_up(&prtd->eos_wait);
 		}
 		atomic_set(&prtd->eos, 0);
@@ -413,6 +414,27 @@ static void compr_event_handler(uint32_t opcode,
 				} else
 					msm_compr_send_buffer(prtd);
 			}
+			/*
+			 * The condition below ensures playback finishes in the
+			 * follow cornercase
+			 * WRITE(last buffer)
+			 * WAIT_FOR_DRAIN
+			 * PAUSE
+			 * WRITE_DONE(X)
+			 * RESUME
+			 */
+			if ((prtd->copied_total == prtd->bytes_sent) &&
+			    atomic_read(&prtd->drain)) {
+				pr_info("RUN ack, wake up & continue pending drain\n");
+
+				if (prtd->last_buffer)
+					prtd->last_buffer = 0;
+
+				prtd->drain_ready = 1;
+				wake_up(&prtd->drain_wait);
+				atomic_set(&prtd->drain, 0);
+			}
+
 			spin_unlock(&prtd->lock);
 			break;
 		case ASM_STREAM_CMD_FLUSH:
@@ -621,6 +643,12 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 	int dir = IN, ret = 0;
 	struct audio_client *ac = prtd->audio_client;
 	uint32_t stream_index;
+	struct asm_softpause_params softpause = {
+		.enable = SOFT_PAUSE_ENABLE,
+		.period = SOFT_PAUSE_PERIOD,
+		.step = SOFT_PAUSE_STEP,
+		.rampingcurve = SOFT_PAUSE_CURVE_LINEAR,
+	};
 	struct asm_softvolume_params softvol = {
 		.period = SOFT_VOLUME_PERIOD,
 		.step = SOFT_VOLUME_STEP,
@@ -662,6 +690,11 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 		ret = msm_compr_set_volume(cstream, 0, 0);
 		if (ret < 0)
 			pr_err("%s : Set Volume failed : %d", __func__, ret);
+
+		ret = q6asm_set_softpause(ac, &softpause);
+		if (ret < 0)
+			pr_err("%s: Send SoftPause Param failed ret=%d\n",
+				__func__, ret);
 
 		ret = q6asm_set_softvolume(ac, &softvol);
 		if (ret < 0)
@@ -823,6 +856,7 @@ static int msm_compr_free(struct snd_compr_stream *cstream)
 	struct snd_soc_pcm_runtime *soc_prtd;
 	struct msm_compr_pdata *pdata;
 	struct audio_client *ac;
+
 	int dir = IN, ret = 0, stream_id;
 	unsigned long flags;
 	uint32_t stream_index;
@@ -853,7 +887,7 @@ static int msm_compr_free(struct snd_compr_stream *cstream)
 	}
 	if (atomic_read(&prtd->eos)) {
 		ret = wait_event_timeout(prtd->eos_wait,
-					 prtd->cmd_ack, 5 * HZ);
+					 prtd->eos_ack, 5 * HZ);
 		if (!ret)
 			pr_err("%s: CMD_EOS failed\n", __func__);
 	}
@@ -1061,6 +1095,7 @@ static int msm_compr_drain_buffer(struct msm_compr_audio *prtd,
 
 	atomic_set(&prtd->drain, 1);
 	prtd->drain_ready = 0;
+	prtd->cmd_interrupt = 0;
 	spin_unlock_irqrestore(&prtd->lock, *flags);
 	pr_debug("%s: wait for buffer to be drained\n",  __func__);
 	rc = wait_event_interruptible(prtd->drain_wait,
@@ -1374,16 +1409,15 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 		prtd->gapless_state.set_next_stream_id = false;
 		pr_debug("%s:CMD_EOS stream_id %d\n", __func__, ac->stream_id);
 
-		prtd->cmd_ack = 0;
+		prtd->eos_ack = 0;
 		atomic_set(&prtd->eos, 1);
 		q6asm_stream_cmd_nowait(ac, CMD_EOS, ac->stream_id);
-
+		prtd->cmd_interrupt = 0;
 		spin_unlock_irqrestore(&prtd->lock, flags);
-
 
 		/* Wait indefinitely for  DRAIN. Flush can also signal this*/
 		rc = wait_event_interruptible(prtd->eos_wait,
-						(prtd->cmd_ack || prtd->cmd_interrupt));
+						(prtd->eos_ack || prtd->cmd_interrupt));
 
 		if (rc < 0)
 			pr_err("%s: EOS wait failed\n", __func__);

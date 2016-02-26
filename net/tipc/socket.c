@@ -63,7 +63,7 @@ struct tipc_sock {
 static int backlog_rcv(struct sock *sk, struct sk_buff *skb);
 static u32 dispatch(struct tipc_port *tport, struct sk_buff *buf);
 static void wakeupdispatch(struct tipc_port *tport);
-static void tipc_data_ready(struct sock *sk, int len);
+static void tipc_data_ready(struct sock *skb);
 static void tipc_write_space(struct sock *sk);
 
 static const struct proto_ops packet_ops;

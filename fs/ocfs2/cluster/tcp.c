@@ -1962,13 +1962,12 @@ static void o2net_listen_data_ready(struct sock *sk)
 	 * data_ready.. we only want to queue listen work for our listening
 	 * socket */
 	if (sk->sk_state == TCP_LISTEN) {
-		mlog(ML_TCP, "bytes: %d\n", bytes);
 		queue_work(o2net_wq, &o2net_listen_work);
 	}
 
 out:
 	read_unlock(&sk->sk_callback_lock);
-	ready(sk, bytes);
+	ready(sk);
 }
 
 static int o2net_open_listening_sock(__be32 addr, __be16 port)

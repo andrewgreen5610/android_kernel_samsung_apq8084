@@ -52,6 +52,7 @@
 #define PCIE20_PARF_PHY_CTRL           0x40
 #define PCIE20_PARF_PHY_REFCLK         0x4C
 #define PCIE20_PARF_CONFIG_BITS        0x50
+#define PCIE20_PARF_TEST_BUS           0xE4
 #define PCIE20_PARF_DBI_BASE_ADDR      0x168
 #define PCIE20_PARF_AXI_MSTR_WR_ADDR_HALT   0x178
 
@@ -85,8 +86,8 @@
 #define WR 1
 
 /* Timing Delays */
-#define PERST_PROPAGATION_DELAY_US_MIN        1000
-#define PERST_PROPAGATION_DELAY_US_MAX        1005
+#define PERST_PROPAGATION_DELAY_US_MIN        10000
+#define PERST_PROPAGATION_DELAY_US_MAX        15000
 #define REFCLK_STABILIZATION_DELAY_US_MIN     1000
 #define REFCLK_STABILIZATION_DELAY_US_MAX     1500
 #define LINK_RETRY_TIMEOUT_US_MIN             20000
@@ -201,6 +202,19 @@ static const struct msm_pcie_irq_info_t msm_pcie_irq_info[MSM_PCIE_MAX_IRQ] = {
 	{"int_bridge_flush_n",	0},
 	{"int_wake",	0}
 };
+
+static int mdm9x35 = 1;
+static int __init get_baseband(char *str)
+{
+	if(!strncasecmp(str, "mdm2", 4)) {
+		mdm9x35 = 1;
+	} else if(!strncasecmp(str, "mdm", 3)) {
+		mdm9x35 = 0;
+	}
+	return 0;
+}
+
+__setup("androidboot.baseband=", get_baseband);
 
 int msm_pcie_get_debug_mask(void)
 {
@@ -1359,6 +1373,48 @@ void msm_pcie_disable(struct msm_pcie_dev_t *dev, u32 options)
 	mutex_unlock(&dev->setup_lock);
 }
 
+void msm_pcie_dump_parf(struct msm_pcie_dev_t *dev)
+{
+	int i, size;
+
+	PCIE_DBG(dev , "RC%d\n", dev->rc_idx);
+
+	size = resource_size(dev->res[MSM_PCIE_RES_PARF].resource);
+	for (i=0; i < size; i+=32) {
+		PCIE_REG(dev, "RC%d: 0x%04x %08x %08x %08x %08x %08x %08x %08x %08x\n",
+			 dev->rc_idx, i,
+			 readl_relaxed(dev->parf + (i + 0)),
+			 readl_relaxed(dev->parf + (i + 4)),
+			 readl_relaxed(dev->parf + (i + 8)),
+			 readl_relaxed(dev->parf + (i + 12)),
+			 readl_relaxed(dev->parf + (i + 16)),
+			 readl_relaxed(dev->parf + (i + 20)),
+			 readl_relaxed(dev->parf + (i + 24)),
+			 readl_relaxed(dev->parf + (i + 28)));
+	}
+	PCIE_REG(dev, "RC%d: ELBI_SYS_STTS: 0%08x\n",
+		 dev->rc_idx, readl_relaxed(dev->elbi + PCIE20_ELBI_SYS_STTS));
+}
+
+void msm_pcie_dump_testbus(struct msm_pcie_dev_t *dev)
+{
+	int i;
+	uint32_t original;
+
+	PCIE_DBG(dev , "RC%d\n", dev->rc_idx);
+
+	original = readl_relaxed(dev->parf + PCIE20_PARF_SYS_CTRL);
+	for (i = 1; i <= 0x1A; i++) {
+		msm_pcie_write_mask(dev->parf + PCIE20_PARF_SYS_CTRL,
+				    0xFF0000, i<<16);
+		PCIE_REG(dev, "RC%d: PARF_SYS_CTRL: 0%08x PARF_TEST_BUS: 0%08x\n",
+			 dev->rc_idx,
+			 readl_relaxed(dev->parf + PCIE20_PARF_SYS_CTRL),
+			 readl_relaxed(dev->parf + PCIE20_PARF_TEST_BUS));
+	}
+	writel_relaxed(original, dev->parf + PCIE20_PARF_SYS_CTRL);
+}
+
 static int msm_pcie_setup(int nr, struct pci_sys_data *sys)
 {
 	struct msm_pcie_dev_t *dev =
@@ -1540,6 +1596,13 @@ static int msm_pcie_probe(struct platform_device *pdev)
 		pcie_drv.rc_num++;
 		PCIE_DBG(&msm_pcie_dev[rc_idx], "PCIe: RC index is %d.\n",
 			rc_idx);
+	}
+
+
+	if(rc_idx == 1 && mdm9x35 == 0) {
+		PCIE_ERR(&msm_pcie_dev[rc_idx],
+				"MDM9x25 doesn't need RC%d\n",rc_idx);
+		goto out;
 	}
 
 	msm_pcie_dev[rc_idx].l1ss_supported =
@@ -1765,10 +1828,14 @@ static int __init pcie_init(void)
 		if (msm_pcie_dev[i].ipc_log == NULL)
 			pr_err("%s: unable to create IPC log context for %s\n",
 				__func__, rc_name);
-		else
-			PCIE_DBG(&msm_pcie_dev[i],
-				"PCIe IPC logging is enable for RC%d\n",
-				i);
+
+		snprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-reg", i);
+		msm_pcie_dev[i].ipc_log_reg =
+			ipc_log_context_create(PCIE_LOG_PAGES, rc_name);
+		if (msm_pcie_dev[i].ipc_log_reg == NULL)
+			pr_err("%s: unable to create IPC log context for %s\n",
+				__func__, rc_name);
+
 		snprintf(rc_name, MAX_RC_NAME_LEN, "pcie%d-long", i);
 		msm_pcie_dev[i].ipc_log_long =
 			ipc_log_context_create(PCIE_LOG_PAGES, rc_name);
@@ -2004,9 +2071,6 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 
 			if (pcie_dev) {
 				rc_idx = pcie_dev->rc_idx;
-				PCIE_DBG(pcie_dev,
-					"PCIe: RC%d: pm_opt:%d;busnr:%d;options:%d\n",
-					rc_idx, pm_opt, busnr, options);
 			} else {
 				pr_err(
 					"PCIe: did not find RC for pci endpoint device 0x%x.\n",
@@ -2084,7 +2148,9 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 		msm_pcie_write_mask(msm_pcie_dev[rc_idx].parf
 					+ PCIE20_PARF_PM_CTRL,
 					0, BIT(1));
+#if !defined(CONFIG_MACH_LENTISLTE_SKT) && !defined(CONFIG_MACH_LENTISLTE_LGT) && !defined(CONFIG_MACH_LENTISLTE_KTT)
 		udelay(REQ_EXIT_L1_DELAY_US);
+#endif
 		msm_pcie_write_mask(msm_pcie_dev[rc_idx].parf
 					+ PCIE20_PARF_PM_CTRL,
 					BIT(1), 0);
@@ -2098,6 +2164,10 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 	}
 
 out:
+	if (ret != PCIBIOS_DEVICE_NOT_FOUND)
+		PCIE_DBG(&msm_pcie_dev[rc_idx],
+			"PCIe: RC%d: pm_opt:%d;busnr:%d;options:%d.\n",
+			rc_idx, pm_opt, busnr, options);
 	return ret;
 }
 EXPORT_SYMBOL(msm_pcie_pm_control);
@@ -2191,13 +2261,13 @@ int msm_pcie_recover_config(struct pci_dev *dev)
 		PCIE_DBG(pcie_dev, "Recover EP of RC%d\n", pcie_dev->rc_idx);
 		msm_pcie_cfg_recover(pcie_dev, false);
 		PCIE_DBG(pcie_dev,
-			"Refreshing the saved config space in PCI framework for RC%d and its EP\n",
-			pcie_dev->rc_idx);
+				"Refreshing the saved config space in PCI framework for RC%d and its EP\n",
+				pcie_dev->rc_idx);
 		pci_save_state(pcie_dev->dev);
 		pci_save_state(dev);
 		pcie_dev->shadow_en = true;
 		PCIE_DBG(pcie_dev, "Turn on shadow for RC%d\n",
-			pcie_dev->rc_idx);
+				pcie_dev->rc_idx);
 	} else {
 		PCIE_ERR(pcie_dev,
 			"PCIe: the link of RC%d is not up yet; can't recover config space.\n",
@@ -2269,3 +2339,65 @@ int msm_pcie_access_control(struct pci_dev *dev, bool allow_access)
 	return ret;
 }
 EXPORT_SYMBOL(msm_pcie_access_control);
+#ifdef CONFIG_BCMDHD_PCIE
+int msm_pcie_status_notify(int val)
+{
+#if defined(CONFIG_BCM4354_MODULE) || defined(CONFIG_BCM4358_MODULE)
+	int rc_idx = 0;
+	int ret;
+	struct msm_pcie_dev_t *pcie_dev = &msm_pcie_dev[rc_idx];
+	struct pci_dev *pcidev = pcie_dev->dev;
+
+	if (!brcm_dev_found) {
+		printk("%s: Could not find BRCM PCI device...\n", __FUNCTION__);
+		brcm_pcie_link_up = false;
+		pcie_dev->user_suspend = true;
+		return -ENODEV;
+	}
+
+	if (val) {
+		if (!brcm_pcie_link_up) {
+			printk("%s: tried to bring-up PCIe Link...\n", __FUNCTION__);
+			ret = msm_pcie_pm_resume(pcidev, NULL, NULL, 0);
+			if (ret) {
+				printk("%s: Failed to bring-up PCIe link!, ret=%d\n",
+					__FUNCTION__, ret);
+				return ret;
+			} else {
+				brcm_pcie_link_up = true;
+				pcie_dev->user_suspend = false;
+			}
+		}
+
+		ret = pci_rescan_bus(pcidev->bus);
+		printk("%s: Find %d PCIE devices\n",
+			__FUNCTION__, ret);
+		msm_pcie_save_restore_brcm_dev(0);
+	} else {
+		if (brcm_pcidev) {
+			pci_stop_and_remove_bus_device(brcm_pcidev);
+			brcm_pcidev = NULL;
+		} else {
+			printk("%s: cannot find BRCM PCIE device\n",
+				__FUNCTION__);
+		}
+
+		pcie_dev->user_suspend = true;
+		ret = msm_pcie_pm_suspend(pcidev, NULL, NULL, 0);
+		if (ret) {
+			printk("%s: Failed to shutdown PCIe link!, ret=%d\n",
+				__FUNCTION__, ret);
+			pcie_dev->user_suspend = false;
+		} else {
+			brcm_pcie_link_up = false;
+		}
+	}
+	/* Wait for 100ms for link stability */
+	msleep(100);
+#endif
+	return 0;
+}
+EXPORT_SYMBOL(msm_pcie_status_notify);
+#endif
+
+

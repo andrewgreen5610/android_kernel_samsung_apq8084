@@ -168,6 +168,7 @@ int msm_gpiomux_write(unsigned gpio, enum msm_gpiomux_setting which,
  * should use msm_gpiomux_write.
  */
 void __msm_gpiomux_write(unsigned gpio, struct gpiomux_setting val);
+void __msm_gpiomux_read(unsigned gpio, struct gpiomux_setting *val);
 
 /* Functions that provide an API for drivers to read from and write to
  * miscellaneous TLMM registers.

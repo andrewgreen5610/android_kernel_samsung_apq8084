@@ -20,6 +20,8 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/cpufreq.h>
+#include <linux/workqueue.h>
+#include <linux/completion.h>
 #include <linux/cpu.h>
 #include <linux/cpumask.h>
 #include <linux/sched.h>
@@ -31,6 +33,7 @@
 #include <linux/of.h>
 #include <soc/qcom/cpufreq.h>
 #include <trace/events/power.h>
+#include <mach/msm_bus.h>
 
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
@@ -49,6 +52,31 @@ static unsigned int *l2_khz;
 static bool is_sync;
 static unsigned long *mem_bw;
 static bool hotplug_ready;
+
+static struct msm_bus_vectors *bus_vec_lst;
+static struct msm_bus_scale_pdata bus_bw = {
+	.name = "msm-cpufreq",
+	.active_only = 1,
+};
+
+static u32 bus_client;
+
+struct delayed_work	cpufreq_bimc_work;
+
+static unsigned int boost_ms = 20;
+module_param(boost_ms, uint, 0644);
+
+struct cpufreq_work_struct {
+	struct work_struct work;
+	struct cpufreq_policy *policy;
+	struct completion complete;
+	int frequency;
+	unsigned int index;
+	int status;
+};
+
+static DEFINE_PER_CPU(struct cpufreq_work_struct, cpufreq_work);
+static struct workqueue_struct *msm_cpufreq_wq;
 
 struct cpufreq_suspend_t {
 	struct mutex suspend_mutex;
@@ -88,8 +116,24 @@ static void update_l2_bw(int *also_cpu)
 	if (rc)
 		pr_err("Unable to update BW (%d)\n", rc);
 
+	pr_debug("CPUFREQ: Bandwidth voting %d\n", index);
+	if (bus_client)
+		rc = msm_bus_scale_client_update_request(bus_client, index);
+	if (rc)
+		pr_err("Bandwidth req failed (%d)\n", rc);
+
+	cancel_delayed_work_sync(&cpufreq_bimc_work);
+	schedule_delayed_work(&cpufreq_bimc_work,
+		msecs_to_jiffies(boost_ms));
 out:
 	mutex_unlock(&l2bw_lock);
+}
+
+static void cpufreq_bimc_release(struct work_struct *work)
+{
+	pr_debug("CPUFREQ: release BIMC voting\n");
+	if (bus_client)
+		msm_bus_scale_client_update_request(bus_client, 0);
 }
 
 static int set_cpu_freq(struct cpufreq_policy *policy, unsigned int new_freq,
@@ -139,6 +183,16 @@ static int set_cpu_freq(struct cpufreq_policy *policy, unsigned int new_freq,
 	return ret;
 }
 
+static void set_cpu_work(struct work_struct *work)
+{
+	struct cpufreq_work_struct *cpu_work =
+		container_of(work, struct cpufreq_work_struct, work);
+
+	cpu_work->status = set_cpu_freq(cpu_work->policy, cpu_work->frequency,
+					cpu_work->index);
+	complete(&cpu_work->complete);
+}
+
 static int msm_cpufreq_target(struct cpufreq_policy *policy,
 				unsigned int target_freq,
 				unsigned int relation)
@@ -146,6 +200,8 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 	int ret = -EFAULT;
 	int index;
 	struct cpufreq_frequency_table *table;
+
+	struct cpufreq_work_struct *cpu_work = NULL;
 
 	mutex_lock(&per_cpu(cpufreq_suspend, policy->cpu).suspend_mutex);
 
@@ -168,8 +224,18 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 		policy->cpu, target_freq, relation,
 		policy->min, policy->max, table[index].frequency);
 
-	ret = set_cpu_freq(policy, table[index].frequency,
-			   table[index].driver_data);
+	cpu_work = &per_cpu(cpufreq_work, policy->cpu);
+	cpu_work->policy = policy;
+	cpu_work->frequency = table[index].frequency;
+	cpu_work->index = table[index].driver_data;
+	cpu_work->status = -ENODEV;
+
+	cancel_work_sync(&cpu_work->work);
+	INIT_COMPLETION(cpu_work->complete);
+	queue_work_on(policy->cpu, msm_cpufreq_wq, &cpu_work->work);
+	wait_for_completion(&cpu_work->complete);
+
+	ret = cpu_work->status;
 
 done:
 	mutex_unlock(&per_cpu(cpufreq_suspend, policy->cpu).suspend_mutex);
@@ -196,6 +262,7 @@ static int msm_cpufreq_init(struct cpufreq_policy *policy)
 	int index;
 	int ret = 0;
 	struct cpufreq_frequency_table *table;
+	struct cpufreq_work_struct *cpu_work = NULL;
 
 	table = cpufreq_frequency_get_table(policy->cpu);
 	if (table == NULL)
@@ -207,6 +274,10 @@ static int msm_cpufreq_init(struct cpufreq_policy *policy)
 	 */
 	if (is_sync)
 		cpumask_setall(policy->cpus);
+
+	cpu_work = &per_cpu(cpufreq_work, policy->cpu);
+	INIT_WORK(&cpu_work->work, set_cpu_work);
+	init_completion(&cpu_work->complete);
 
 	/* synchronous cpus share the same policy */
 	if (!cpu_clk[policy->cpu])
@@ -367,13 +438,35 @@ static struct cpufreq_driver msm_cpufreq_driver = {
 };
 
 #define PROP_TBL "qcom,cpufreq-table"
+#define PROP_PORTS "qcom,cpu-mem-ports"
 static int cpufreq_parse_dt(struct device *dev)
 {
 	int ret, len, nf, num_cols = 2, i, j;
+	int num_paths = 0, k;
 	u32 *data;
+	u32 *ports;
+	struct msm_bus_vectors *v = NULL;
 
 	if (l2_clk)
 		num_cols++;
+
+	/* Parse optional bus ports parameter */
+	if (of_find_property(dev->of_node, PROP_PORTS, &len)) {
+		len /= sizeof(*ports);
+		if (len % 2)
+			return -EINVAL;
+
+		ports = devm_kzalloc(dev, len * sizeof(*ports), GFP_KERNEL);
+		if (!ports)
+			return -ENOMEM;
+		ret = of_property_read_u32_array(dev->of_node, PROP_PORTS,
+						 ports, len);
+
+		if (ret)
+			return ret;
+		num_paths = len / 2;
+		num_cols++;
+	}
 
 	/* Parse CPU freq -> L2/Mem BW map table. */
 	if (!of_find_property(dev->of_node, PROP_TBL, &len))
@@ -403,6 +496,15 @@ static int cpufreq_parse_dt(struct device *dev)
 	if (l2_clk) {
 		l2_khz = devm_kzalloc(dev, nf * sizeof(*l2_khz), GFP_KERNEL);
 		if (!l2_khz)
+			return -ENOMEM;
+	}
+
+	if (num_paths) {
+		int sz_u = nf * sizeof(*bus_bw.usecase);
+		int sz_v = nf * num_paths * sizeof(*bus_vec_lst);
+		bus_bw.usecase = devm_kzalloc(dev, sz_u, GFP_KERNEL);
+		v = bus_vec_lst = devm_kzalloc(dev, sz_v, GFP_KERNEL);
+		if (!bus_bw.usecase || !bus_vec_lst)
 			return -ENOMEM;
 	}
 
@@ -449,10 +551,29 @@ static int cpufreq_parse_dt(struct device *dev)
 		}
 
 		mem_bw[i] = data[j++];
+
+		if (num_paths) {
+			unsigned int bw_mbps = data[j++];
+			bus_bw.usecase[i].num_paths = num_paths;
+			bus_bw.usecase[i].vectors = v;
+			for (k = 0; k < num_paths; k++) {
+				v->src = ports[k * 2];
+				v->dst = ports[k * 2 + 1];
+				v->ib = bw_mbps * 1000000ULL;
+				v++;
+			}
+
+			pr_info("CPUFREQ: %s: i=%d, bw_mbps=%d\n", __func__, i, bw_mbps);
+		}
 	}
+
+	bus_bw.num_usecases = i;
 
 	freq_table[i].driver_data = i;
 	freq_table[i].frequency = CPUFREQ_TABLE_END;
+
+	if (ports)
+		devm_kfree(dev, ports);
 
 	devm_kfree(dev, data);
 
@@ -533,6 +654,14 @@ static int __init msm_cpufreq_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	if (bus_bw.usecase) {
+		bus_client = msm_bus_scale_register_client(&bus_bw);
+		if (!bus_client)
+			dev_warn(dev, "Unable to register bus client\n");
+	}
+
+	INIT_DELAYED_WORK(&cpufreq_bimc_work, cpufreq_bimc_release);
+
 #ifdef CONFIG_DEBUG_FS
 	if (!debugfs_create_file("msm_cpufreq", S_IRUGO, NULL, NULL,
 		&msm_cpufreq_fops))
@@ -575,6 +704,7 @@ static int __init msm_cpufreq_register(void)
 		return rc;
 	}
 
+	msm_cpufreq_wq = alloc_workqueue("msm-cpufreq", WQ_HIGHPRI, 0);
 	register_pm_notifier(&msm_cpufreq_pm_notifier);
 	return cpufreq_register_driver(&msm_cpufreq_driver);
 }

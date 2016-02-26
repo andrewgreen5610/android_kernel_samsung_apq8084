@@ -102,18 +102,7 @@ extern struct security_operations *security_ops;
 /* SECMARK reference count */
 static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
 
-#ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-int selinux_enforcing;
-
-static int __init enforcing_setup(char *str)
-{
-	unsigned long enforcing;
-	if (!strict_strtoul(str, 0, &enforcing))
-		selinux_enforcing = enforcing ? 1 : 0;
-	return 1;
-}
-__setup("enforcing=", enforcing_setup);
-#endif
+int selinux_enforcing = 0;
 
 #ifdef CONFIG_SECURITY_SELINUX_BOOTPARAM
 int selinux_enabled = CONFIG_SECURITY_SELINUX_BOOTPARAM_VALUE;
@@ -1548,6 +1537,11 @@ static int inode_has_perm(const struct cred *cred,
 
 	sid = cred_sid(cred);
 	isec = inode->i_security;
+
+	if (unlikely(!isec)){
+		printk(KERN_CRIT "[SELinux] isec is NULL, inode->i_security is already freed. \n");
+		return -EACCES;
+	}
 
 	return avc_has_perm_flags(sid, isec->sid, isec->sclass, perms, adp, flags);
 }
@@ -3387,6 +3381,12 @@ static int selinux_cred_alloc_blank(struct cred *cred, gfp_t gfp)
 static void selinux_cred_free(struct cred *cred)
 {
 	struct task_security_struct *tsec = cred->security;
+
+	if((unsigned long) cred->security == 0x7) {
+		printk(KERN_ERR"CRED SECURITY is already freed  %s -> %p sec %p SHOULD BE 7\n",
+					__func__, cred, cred->security);
+		return;
+	}
 
 	/*
 	 * cred->security == NULL if security_cred_alloc_blank() or

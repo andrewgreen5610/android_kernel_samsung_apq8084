@@ -165,6 +165,8 @@ static irqreturn_t handle_linkdown_irq(int irq, void *data)
 		"PCIe: No. %ld linkdown IRQ for RC%d.\n",
 		dev->linkdown_counter, dev->rc_idx);
 
+	PCIE_DUMP_ALL_REG(dev);
+
 	if (!dev->enumerated || dev->link_status != MSM_PCIE_LINK_ENABLED) {
 		PCIE_DBG(dev,
 			"PCIe:Linkdown IRQ for RC%d when the link is not enabled\n",

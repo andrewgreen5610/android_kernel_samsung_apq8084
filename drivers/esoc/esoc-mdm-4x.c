@@ -327,6 +327,7 @@ static int mdm_cmd_exe(enum esoc_cmd cmd, struct esoc_clink *esoc)
 		mdm->debug = 0;
 		mdm->ready = false;
 		ret = sysmon_send_shutdown(mdm->sysmon_subsys_id);
+		device_lock(dev);
 		if (ret)
 			dev_err(mdm->dev, "Graceful shutdown fail, ret = %d\n",
 									ret);
@@ -357,6 +358,7 @@ static int mdm_cmd_exe(enum esoc_cmd cmd, struct esoc_clink *esoc)
 		esoc_clink_queue_request(ESOC_REQ_SHUTDOWN, esoc);
 		mdm_power_down(mdm);
 		mdm_update_gpio_configs(mdm, GPIO_UPDATE_BOOTING_CONFIG);
+		device_unlock(dev);
 		break;
 	case ESOC_RESET:
 		mdm_toggle_soft_reset(mdm);
@@ -598,7 +600,7 @@ static irqreturn_t mdm_pblrdy_change(int irq, void *dev_id)
 	dev = mdm->dev;
 	dev_dbg(dev, "pbl ready %d:\n",
 			gpio_get_value(MDM_GPIO(mdm, MDM2AP_PBLRDY)));
-	if (mdm->init) {
+	if (mdm->init && gpio_get_value(MDM_GPIO(mdm, MDM2AP_PBLRDY))) {
 		mdm->init = 0;
 		esoc_clink_queue_request(ESOC_REQ_IMG, esoc);
 		return IRQ_HANDLED;
@@ -928,14 +930,27 @@ static struct mdm_ops mdm9x35_ops = {
 	.config_hw = mdm9x35_setup_hw,
 };
 
-static const struct of_device_id mdm_dt_match[] = {
-	{ .compatible = "qcom,ext-mdm9x25",
-		.data = &mdm9x25_ops, },
+static struct of_device_id mdm_dt_match[] = {
 	{ .compatible = "qcom,ext-mdm9x35",
 		.data = &mdm9x35_ops, },
 	{},
 };
 MODULE_DEVICE_TABLE(of, mdm_dt_match);
+
+static int __init get_baseband(char *str)
+{
+	if(!strncasecmp(str, "mdm2", 4)) {
+		strcpy(mdm_dt_match->compatible, "qcom,ext-mdm9x35");
+		mdm_dt_match->data = &mdm9x35_ops;
+	} else if(!strncasecmp(str, "mdm", 3)) {
+		strcpy(mdm_dt_match->compatible, "qcom,ext-mdm9x25");
+		mdm_dt_match->data = &mdm9x25_ops;
+	}
+	pr_emerg("%s: %s\n", __func__, mdm_dt_match->compatible);
+
+	return 0;
+}
+__setup("androidboot.baseband=", get_baseband);
 
 static int mdm_probe(struct platform_device *pdev)
 {

@@ -155,10 +155,14 @@ int selinux_xfrm_state_pol_flow_match(struct xfrm_state *x, struct xfrm_policy *
 static int selinux_xfrm_skb_sid_ingress(struct sk_buff *skb,
 					u32 *sid, int ckall)
 {
-	struct sec_path *sp = skb->sp;
+	struct sec_path *sp;
 
 	*sid = SECSID_NULL;
 
+	if (skb == NULL)
+		return 0;
+
+	sp = skb->sp;
 	if (sp) {
 		int i, sid_set = 0;
 
@@ -368,6 +372,7 @@ void selinux_xfrm_policy_free(struct xfrm_sec_ctx *ctx)
 int selinux_xfrm_policy_delete(struct xfrm_sec_ctx *ctx)
 {
 	const struct task_security_struct *tsec = current_security();
+	int rc = 0;
 
 	if (!ctx)
 		return 0;
@@ -410,6 +415,7 @@ int selinux_xfrm_state_delete(struct xfrm_state *x)
 {
 	const struct task_security_struct *tsec = current_security();
 	struct xfrm_sec_ctx *ctx = x->security;
+	int rc = 0;
 
 	if (!ctx)
 		return 0;

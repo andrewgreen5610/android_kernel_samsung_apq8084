@@ -379,6 +379,24 @@ config MSM_LPM_TEST
 	  processes them to measure various stats including latency
 	  measurement.
 
+
+menu "Board Selection"
+config SEC_LENTIS_PROJECT
+        depends on ARCH_APQ8084
+        default n
+        bool "Samsung LENTIS project"
+        help
+          Support for Samsung LENTIS project.
+
+config SEC_KCCAT6_PROJECT
+        depends on ARCH_APQ8084
+        default n
+        bool "Samsung KCCAT6 project"
+        help
+          Support for Samsung KCCAT6 project.
+
+endmenu
+
 config MSM_REMOTE_SPINLOCK_DEKKERS
 	bool
 config MSM_REMOTE_SPINLOCK_SWP
@@ -794,6 +812,32 @@ config MSM_DMA_TEST
 	help
 	  Intended to be compiled as a module.  Provides a device node
 	  and ioctls for testing the MSM dma system.
+
+config USER_RESET_DEBUG
+	bool "KOR reset reason debug feature in user version"
+    default n
+    help
+        This option enables debugging log for B10 project.
+        This option provides reset history log in user version.
+        This option enable proc/reset_reason support
+        It's only support KOR Model
+
+
+config RTC_AUTO_PWRON
+	bool "RTC Auto Power on PM8xxx PMICs"
+	depends on ARCH_MSM
+	default n
+	help
+	  Support for the auto power on alarm on the PM8XXX PMIC.
+	  Say Y if you want to enable this feature.
+
+config RTC_AUTO_PWRON_PARAM
+	bool "RTC Auto Power on with param PM8xxx PMICs"
+	depends on RTC_AUTO_PWRON
+	default n
+	help
+	  This option is used to prevent invalid RTC alarm power on.
+	  Say Y if you want to enable this feature.
 
 config WIFI_CONTROL_FUNC
 	bool "Enable WiFi control function abstraction"
