@@ -135,7 +135,15 @@ dtb-$(CONFIG_SEC_TBLTE_PROJECT) = apq8084-sec-tblte-r03.dtb \
 
 # For KCCAT6
 dtb-$(CONFIG_SEC_KCCAT6_PROJECT) = apq8084-sec-kccat6-r00.dtb \
-	apq8084-sec-kccat6-r01.dtb
+	apq8084-sec-kccat6-r01.dtb \
+	apq8084-sec-lentis-r00.dtb \
+	apq8084-sec-lentis-r02.dtb \
+	apq8084-sec-lentis-r03.dtb \
+	apq8084-sec-lentis-r04.dtb \
+	apq8084-sec-lentis-r06.dtb \
+	apq8084-sec-lentis-r07.dtb \
+	apq8084-sec-lentis-r08.dtb \
+	apq8084-sec-lentis-r10.dtb
 
 # TRLTE DTB Targets will be overridden by below for various project.
 # For TRLTE DCM/KDDI
